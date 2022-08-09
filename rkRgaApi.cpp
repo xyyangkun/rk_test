@@ -66,7 +66,7 @@ int rkRgaBlit1(struct rkRgaCfg *src_cfg, struct rkRgaCfg *dst_cfg, struct rkRgaC
     src.fd = -1;
     src.mmuFlag = 1;
     src.virAddr = src_cfg->addr;
-	src.blend = 0xff0105;
+	//src.blend = 0xff0105;
 
     memset(&src1, 0, sizeof(rga_info_t));
     src1.fd = -1;

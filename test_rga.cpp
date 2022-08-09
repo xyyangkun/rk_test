@@ -29,7 +29,7 @@
 #include <rga/RgaApi.h>
 //#include "RgaApi.h"
 #include "rkRgaApi.h"
-#include "easymedia/rkmedia_api.h"
+#include "rkmedia/rkmedia_api.h"
 
 #define ALIGN16(value) ((value + 15) & (~15))
 

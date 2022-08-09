@@ -30,7 +30,7 @@
 #include <rga/RgaApi.h>
 //#include "RgaApi.h"
 #include "rkRgaApi.h"
-#include "easymedia/rkmedia_api.h"
+#include "rkmedia/rkmedia_api.h"
 
 #define ALIGN16(value) ((value + 15) & (~15))
 
@@ -85,6 +85,9 @@ static void blend_buffer(void *src_p, int src_fd, int src_w, int src_h, int src_
 
 int main()
 {
+
+
+    // src2 要与dst分辨率相同，
 	unsigned int src1_w, src1_h;
 	unsigned int src2_w, src2_h;
 	unsigned int dst_w,  dst_h ;
@@ -95,12 +98,12 @@ int main()
 	src1_h = 1080;
 	src1_type = IMAGE_TYPE_NV12;
 
-	src2_w = 1280;
-	src2_h = 720;
+	src2_w = 1920;
+	src2_h = 1080;
 	src2_type = IMAGE_TYPE_ARGB8888;//RK_FORMAT_RGBA_8888;
 
-	dst_w = 1280;
-	dst_h = 720;
+	dst_w = 1920;
+	dst_h = 1080;
 	dst_type = IMAGE_TYPE_NV12;
 	//dst_type = IMAGE_TYPE_ARGB8888;
 	// 分配内存
@@ -143,7 +146,7 @@ int main()
 	// 读取数据
 	{
 		// src1
-		const char *src1 = "src1.yuv";
+		const char *src1 = "1080p_nv12.yuv";
 		FILE *fp = fopen(src1, "rb");
 		assert(fp);
 		fseek(fp, 0, SEEK_END);
@@ -158,7 +161,7 @@ int main()
 
 	{
 		// src2
-		const char *src2 = "src2.rgb";
+		const char *src2 = "1080p_rgba.rgb";
 		FILE *fp = fopen(src2, "rb");
 		assert(fp);
 		fseek(fp, 0, SEEK_END);
@@ -169,6 +172,12 @@ int main()
 		int ret = fread(RK_MPI_MB_GetPtr(mb_src2), 1, size, fp);
 		assert(ret == size);
 		fclose(fp);
+
+        unsigned char *p = (unsigned char *)RK_MPI_MB_GetPtr(mb_src2);
+		for(int i=0; i<1080; i++)
+		    for(int j=0; j<1920; j++) {
+                p[4*(i*1920+j)+3] = 0xcc;
+            }
 	}
 
 
