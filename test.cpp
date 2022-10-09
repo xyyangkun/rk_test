@@ -18,7 +18,12 @@
 #include <signal.h>
 #include "h264_dec.h"
 
+#include <iostream>
+#include <memory>
+#include "easymedia/rkmedia_api.h"
+#include "easymedia/buffer.h"
 
+std::shared_ptr<easymedia::ImageBuffer> ib;
 static bool quit = false;
 static void sigterm_handler(int sig) {
 	quit = true;

@@ -71,14 +71,14 @@ endif ()
 
 LINK_DIRECTORIES(${LIBRARY_OUTPUT_PATH})
 
-include_directories(include include/rkmedia include/libdrm include/zlm)
+include_directories(include include/rkmedia rkmedia easymedia include/libdrm include/zlm)
 link_directories(lib lib/zlm lib/mali lib/zlog)
 
 ADD_DEFINITIONS(-DARM)
 set(LINK_LIB_LIST m pthread asound avformat avdevice avcodec avfilter swresample avutil  rga drm rockchip_mpp  z asound v4l2 v4lconvert jpeg SDL2 SDL2_ttf easymedia freetype mali-bifrost-g52-g2p0-dummy ${LINK_ASAN} fdk-aac jemalloc png)
 
 
-add_executable(rktest h264_dec.c  test.cpp)
+add_executable(rktest h264_dec.c  test.cpp vpu_decode.c rk_h264_decode.c)
 target_link_libraries(rktest easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN})
 
 

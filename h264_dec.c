@@ -18,8 +18,13 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <assert.h>
 #include "h264_dec.h"
+#include "rk_h264_decode.h"
+#include "h264_annexb_nalu.h"
+#include "easymedia/rkmedia_api.h"
+#include "myutils.h"
 
 static uint8_t* file_read(const char* file, long* size)
 {
@@ -40,71 +45,57 @@ static uint8_t* file_read(const char* file, long* size)
 	return NULL;
 }
 
-
-static const uint8_t* h264_startcode(const uint8_t *data, size_t bytes)
+typedef struct s_h264_dec
 {
-	size_t i;
-	for (i = 2; i + 1 < bytes; i++)
-	{
-		if (0x01 == data[i] && 0x00 == data[i - 1] && 0x00 == data[i - 2])
-			return data + i + 1;
-	}
-
-	return NULL;
-}
-
-///@param[in] h264 H.264 byte stream format data(A set of NAL units)
-int mpeg4_h264_annexb_nalu(const void* h264, size_t bytes, void (*handler)(void* param, const uint8_t* nalu, size_t bytes), void* param)
-{
-	ptrdiff_t n;
-	const uint8_t* p, *next, *end;
-
-	end = (const uint8_t*)h264 + bytes;
-	p = h264_startcode((const uint8_t*)h264, bytes);
-
-	int hl;
-	int _hl;
-	
-	_hl = p - (const uint8_t*)h264;
-	while (p)
-	{
-		next = h264_startcode(p, (int)(end - p));
-		if (next)
-		{
-			n = next - p - 3;
-		}
-		else
-		{
-			n = end - p;
-		}
-		hl = 3;
-		
-		while (n > 0 && 0 == p[n - 1]) // 是 00 00 00 01这种情况
-		{
-			n--; // filter tailing zero // 如果倒数第四位时0，长度要再减少1
-			hl++; // 
-		}
-		assert(n > 0);
-		if (n > 0)
-		{
-			//handler(param, p, (int)n);
-			//handler(param, p-4, (int)(n+4)); // 可能存在 00 00 01这种情况
-			handler(param, p-_hl, (int)(n+_hl));
-		}
-		_hl = hl;
-		p = next;
-	}
-
-	return 0;
-}
+	FILE *fp_yuv;
+	FILE *fp_h264_out;
+	struct vpu_h264_decode dec;
+	MEDIA_BUFFER_POOL mbp;
+}t_h264_dec;
 
 // 获得h264 帧，可以进行解码
 static void h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 {
-	//printf("===============>yk debug!, param=%p==>nalu %d== %02x %02x %02x %02x\n", param, bytes, nalu[0], nalu[1], nalu[2], nalu[3]);
-	FILE *fp=(FILE*)param;
-	if(fp)fwrite(nalu, bytes, 1, fp);
+	int ret;
+	printf("===============>yk debug!, param=%p==>nalu %d== %02x %02x %02x %02x\n", param, bytes, nalu[0], nalu[1], nalu[2], nalu[3]);
+	t_h264_dec *dec = (t_h264_dec*)param;
 
+	// 写入解析出来的h264帧
+	if(dec->fp_h264_out)fwrite(nalu, bytes, 1, dec->fp_h264_out);
+
+
+
+	// 进行解码
+	int dtype = 0;
+	MEDIA_BUFFER mb;
+	MEDIA_BUFFER mb_vpu = NULL;
+	mb_vpu = RK_MPI_MB_POOL_GetBuffer(dec->mbp, RK_TRUE);
+	if (!mb_vpu) {
+		printf("ERROR: BufferPool get null buffer...\n");
+		exit(1);
+	}
+	mb = RK_MPI_MB_CreateBuffer(bytes, RK_FALSE, 0);
+	if (!mb_vpu) {
+		printf("ERROR: Buffer get null buffer...\n");
+		exit(1);
+	}
+	memcpy(RK_MPI_MB_GetPtr(mb), nalu, bytes);
+	printf("%s %d size===>%d\n", __FUNCTION__, __LINE__, RK_MPI_MB_GetSize(mb));
+	ret = vpu_decode_h264_doing(&dec->dec, RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetSize(mb),
+			RK_MPI_MB_GetFD(mb_vpu), RK_MPI_MB_GetPtr(mb_vpu) , &dtype);
+	if(ret !=0 )
+	{
+		printf("ERROR:decode!ret=%d\n", ret);
+		//exit(1);
+	}
+	printf("%s %d\n", __FUNCTION__, __LINE__);
+
+	// 写入解码后数据
+	//if(dec->fp_yuv)fwrite(RK_MPI_MB_GetPtr(mb_vpu), RK_MPI_MB_GetSize(mb_vpu), 1, dec->fp_yuv);
+
+	// 释放数据
+	RK_MPI_MB_ReleaseBuffer(mb);
+	RK_MPI_MB_ReleaseBuffer(mb_vpu);
 }
 
 static int is_start = 1;
@@ -113,8 +104,42 @@ static void *test_h264_dec_proc(void *param)
 {
 	char *h264 = "./tennis200.h264";
 	
-	FILE* fp = fopen("out.h264", "wb+");
+	FILE* fp_h264_out = fopen("out.h264", "wb+");
+	FILE* fp_yuv = fopen("out.yuv", "wb+");
 	int ret;
+
+	t_h264_dec dec;
+	int w=1920;
+	int h = 1080;
+	// 创建解码器
+	ret = vpu_decode_h264_init(&dec.dec, w, h);
+	if(ret != 0)
+	{
+		printf("error in h264 dec init,ret=%d\n", ret);
+		exit(0);
+	}
+	dec.fp_h264_out = fp_h264_out;
+	dec.fp_yuv = fp_yuv;
+	dec.dec.fp_output = fp_yuv;
+
+	// 创建内存池
+	MB_POOL_PARAM_S stBufferPoolParam;
+	stBufferPoolParam.u32Cnt = 5;
+	stBufferPoolParam.u32Size =
+		0; // Automatic calculation using imgInfo internally
+	stBufferPoolParam.enMediaType = MB_TYPE_VIDEO;
+	stBufferPoolParam.bHardWare = RK_TRUE;
+	stBufferPoolParam.u16Flag = MB_FLAG_NOCACHED;
+	stBufferPoolParam.stImageInfo.enImgType = IMAGE_TYPE_NV12;
+	stBufferPoolParam.stImageInfo.u32Width = w;
+	stBufferPoolParam.stImageInfo.u32Height = h;
+	stBufferPoolParam.stImageInfo.u32HorStride = ALIGN16(w);
+	stBufferPoolParam.stImageInfo.u32VerStride = ALIGN16(h);
+	dec.mbp = RK_MPI_MB_POOL_Create(&stBufferPoolParam);
+	if (!dec.mbp) {
+		printf("ERROR in Create usb video buffer pool for vo failed! w:%d h:%d\n", w, h);
+		exit(1);
+	}
 
 	// 读取h264文件
 	long bytes = 0;
@@ -122,14 +147,23 @@ static void *test_h264_dec_proc(void *param)
 	while(is_start == 1) {
 		uint8_t *p = ptr;
 		// 解析h264文件
-		ret = mpeg4_h264_annexb_nalu(p, bytes, h264_handler, (void*)fp);
+		ret = mpeg4_h264_annexb_nalu(p, bytes, h264_handler, (void*)&dec);
 		if(ret == 0)break;
 
 	}
 
-	if(fp){
-		fclose(fp);
+	ret= vpu_decode_h264_done(&dec.dec);
+	assert(ret==0);
+
+	if(fp_h264_out){
+		fclose(fp_h264_out);
 	}
+	if(fp_yuv){
+		fclose(fp_yuv);
+	}
+
+	// 删除内存池
+	RK_MPI_MB_POOL_Destroy(dec.mbp);
 
 	free(ptr);
 }
