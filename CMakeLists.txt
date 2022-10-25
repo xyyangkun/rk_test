@@ -5,8 +5,8 @@ set(CMAKE_CXX_STANDARD 11)
 #加载自定义模块
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-set(CMAKE_BUILD_TYPE "Debug")
-#set(CMAKE_BUILD_TYPE "Release")
+#set(CMAKE_BUILD_TYPE "Debug")
+set(CMAKE_BUILD_TYPE "Release")
 
 set(SYS_BUILD_TYPE "ARM64")
 
@@ -71,7 +71,8 @@ endif ()
 
 LINK_DIRECTORIES(${LIBRARY_OUTPUT_PATH})
 
-include_directories(include include/rkmedia rkmedia easymedia include/libdrm include/zlm)
+#include_directories(include include/rkmedia rkmedia/ easymedia include/libdrm include/zlm)
+include_directories(rkmedia  ${SYSROOT_PATH}/usr/include/easymedia/)
 link_directories(lib lib/zlm lib/mali lib/zlog)
 
 ADD_DEFINITIONS(-DARM)
@@ -90,4 +91,9 @@ add_executable(test_write test_write.c)
 add_executable(test_sd_event test_sd_event.c uevent.c)
 
 add_executable(testc testc.c)
+
+add_executable(my_vo_display_test rkmedia_vo_display_test.c)
+target_link_libraries(my_vo_display_test easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN})
+
+
 
