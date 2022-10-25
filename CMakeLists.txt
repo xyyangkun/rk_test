@@ -5,8 +5,8 @@ set(CMAKE_CXX_STANDARD 11)
 #加载自定义模块
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-#set(CMAKE_BUILD_TYPE "Debug")
-set(CMAKE_BUILD_TYPE "Release")
+set(CMAKE_BUILD_TYPE "Debug")
+#set(CMAKE_BUILD_TYPE "Release")
 
 set(SYS_BUILD_TYPE "ARM64")
 
@@ -82,7 +82,12 @@ add_executable(rktest h264_dec.c  test.cpp vpu_decode.c rk_h264_decode.c)
 target_link_libraries(rktest easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN})
 
 
-
 #add_executable(rkmedia_vi_get_frame_test rkmedia_vi_get_frame_test.c)
 #target_link_libraries(rkmedia_vi_get_frame_test easymedia mk_api rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype mali-bifrost-g52-g2p0-dummy ${LINK_ASAN})
+
+add_executable(test_write test_write.c)
+
+add_executable(test_sd_event test_sd_event.c uevent.c)
+
+add_executable(testc testc.c)
 

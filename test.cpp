@@ -37,5 +37,6 @@ int main()
 	while(!quit) {
 		usleep(100*1000);
 	}
+	printf("==========================> will exit!\n");
 	stop_test_h264_dec();
 }

@@ -44,7 +44,8 @@ int vpu_decode_h264_init(struct vpu_h264_decode* decode, int width, int height)
         return -1;
     }
 
-	MppCodingType type  = MPP_VIDEO_CodingAVC;
+	//MppCodingType type  = MPP_VIDEO_CodingAVC;
+	MppCodingType type  = MPP_VIDEO_CodingHEVC;
     ret = mpp_init(decode->mpp_ctx, MPP_CTX_DEC, type);
     if (MPP_OK != ret) {
         printf("mpp_init failed\n");

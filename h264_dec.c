@@ -86,7 +86,7 @@ static void h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 	if(ret !=0 )
 	{
 		printf("ERROR:decode!ret=%d\n", ret);
-		//exit(1);
+		exit(1);
 	}
 	printf("%s %d\n", __FUNCTION__, __LINE__);
 
@@ -102,13 +102,15 @@ static int is_start = 1;
 static pthread_t thread_dec;
 static void *test_h264_dec_proc(void *param)
 {
-	char *h264 = "./tennis200.h264";
+	//char *h264 = "./tennis200.h264";
+	char *h264 = "./1080P.h265";
 	
 	FILE* fp_h264_out = fopen("out.h264", "wb+");
 	FILE* fp_yuv = fopen("out.yuv", "wb+");
 	int ret;
 
 	t_h264_dec dec;
+	memset(&dec, 0, sizeof(t_h264_dec));
 	int w=1920;
 	int h = 1080;
 	// 创建解码器
