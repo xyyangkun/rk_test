@@ -5,8 +5,8 @@ set(CMAKE_CXX_STANDARD 11)
 #加载自定义模块
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-#set(CMAKE_BUILD_TYPE "Debug")
-set(CMAKE_BUILD_TYPE "Release")
+set(CMAKE_BUILD_TYPE "Debug")
+#set(CMAKE_BUILD_TYPE "Release")
 
 set(SYS_BUILD_TYPE "ARM64")
 
@@ -48,6 +48,8 @@ add_compile_options(-fno-omit-frame-pointer)
 SET(CMAKE_EXE_LINKER_FLAGS "-fsanitize=address")
 SET(LINK_ASAN asan)
 endif()
+
+add_compile_options(-Wall) #//激活所有的warnings
 
 # 忽略deprecated-declarations 警告与错误
 add_compile_options(-Wno-deprecated-declarations)
@@ -99,3 +101,5 @@ target_link_libraries(my_vo_display_test easymedia rga drm rockchip_mpp avformat
 add_executable(rkmedia_resolution_change rkmedia_resolution_change.c)
 target_link_libraries(rkmedia_resolution_change easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN})
 
+add_executable(rkmedia_vi_rga_crop_vo_venc_test rkmedia_vi_rga_crop_vo_venc_test.cpp)
+target_link_libraries(rkmedia_vi_rga_crop_vo_venc_test easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN})

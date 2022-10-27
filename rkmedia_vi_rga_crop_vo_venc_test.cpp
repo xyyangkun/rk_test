@@ -278,8 +278,8 @@ static void *GetJpgMediaBuffer(void *arg) {
 		if (save_file)
 			fwrite(RK_MPI_MB_GetPtr(mb), 1, RK_MPI_MB_GetSize(mb), save_file);
 		RK_MPI_MB_ReleaseBuffer(mb);
+		mb = NULL;
 	}
-	exit(1);
 
 	if (save_file)
 		fclose(save_file);
@@ -775,17 +775,17 @@ int main(int argc, char *argv[]) {
   init_venc();
 
   // venc
-  pthread_t read_thread;
+  pthread_t read_thread=0;
   pthread_create(&read_thread, NULL, GetMediaBuffer, &demo_arg);
 
-  pthread_t venc_thread;
+  pthread_t venc_thread=0;
   {
 	  char *output_file = NULL;
 	  //const char *output_file = "out.h264";
 	  pthread_create(&venc_thread, NULL, GetVencBuffer, (void *)output_file);
   }
 
-  pthread_t read_venc1_thread;
+  pthread_t read_venc1_thread=0;
   {
 	  //const char *output_file = "test.jpeg";
 	  const char *output_file = NULL;
@@ -805,9 +805,12 @@ int main(int argc, char *argv[]) {
   }
 
   printf("%s exit!\n", __func__);
-  pthread_join(read_thread, NULL);
-  pthread_join(read_venc1_thread, NULL);
-  pthread_join(venc_thread, NULL);
+  if(read_thread)
+	  pthread_join(read_thread, NULL);
+  if(read_venc1_thread)
+	  pthread_join(read_venc1_thread, NULL);
+  if(venc_thread)
+	  pthread_join(venc_thread, NULL);
 
   //RK_MPI_VENC_DestroyChn(g_stVencChn.s32ChnId);
   deinit_venc();
