@@ -96,4 +96,6 @@ add_executable(my_vo_display_test rkmedia_vo_display_test.c)
 target_link_libraries(my_vo_display_test easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN})
 
 
+add_executable(rkmedia_resolution_change rkmedia_resolution_change.c)
+target_link_libraries(rkmedia_resolution_change easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN})
 
