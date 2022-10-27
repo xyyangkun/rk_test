@@ -73,9 +73,16 @@ void change_resolution(MB_IMAGE_INFO_S &stImageInfo, int &w, int &h)
 			ret =  RK_MPI_VENC_SetResolution(0, stResolutionParam);
 			if(ret != 0)
 			{
-				printf("xxxxxxxxxxxxxxx => error in set resolution!!!!\n");
+				printf("xxxxxxxxxxxxxxx => 1error in set resolution!!!!\n");
 				exit(0);
 			}
+			ret =  RK_MPI_VENC_SetResolution(1, stResolutionParam);
+			if(ret != 0)
+			{
+				printf("xxxxxxxxxxxxxxx => 2error in set resolution!!!!\n");
+				exit(0);
+			}
+
 			clock_gettime(CLOCK_MONOTONIC, &endT);
 			delta_us = (endT.tv_sec - startT.tv_sec) * 1000000 + (endT.tv_nsec - startT.tv_nsec) / 1000;
 			delta_ms = (endT.tv_sec - startT.tv_sec) * 1000 + (endT.tv_nsec - startT.tv_nsec) / 1000000;
@@ -124,7 +131,13 @@ void change_resolution(MB_IMAGE_INFO_S &stImageInfo, int &w, int &h)
 			ret =  RK_MPI_VENC_SetResolution(0, stResolutionParam);
 			if(ret != 0)
 			{
-				printf("xxxxxxxxxxxxxxx => error in set resolution!!!!\n");
+				printf("xxxxxxxxxxxxxxx => 3error in set resolution!!!!\n");
+				exit(0);
+			}
+			ret =  RK_MPI_VENC_SetResolution(1, stResolutionParam);
+			if(ret != 0)
+			{
+				printf("xxxxxxxxxxxxxxx => 4error in set resolution!!!!\n");
 				exit(0);
 			}
 			clock_gettime(CLOCK_MONOTONIC, &endT);
@@ -212,6 +225,69 @@ static void *GetVencBuffer(void *arg) {
 	return NULL;
 }
 
+static void *GetJpgMediaBuffer(void *arg) {
+	char *ot_path = (char *)arg;
+	FILE *save_file = NULL;
+	if(arg) {
+		printf("#Start %s thread, arg:%p, out path: %s\n", __func__, arg, ot_path);
+		save_file = fopen(ot_path, "wb");
+		if (!save_file)
+		{
+			printf("ERROR: Open %s failed!\n", ot_path);
+			exit(1);
+		}
+	}
+
+	MEDIA_BUFFER mb = NULL;
+	while (!quit) {
+		mb = RK_MPI_SYS_GetMediaBuffer(RK_ID_VENC, 1, 500);
+		if (!mb) {
+			printf("in %s get null buffer!or timeout 500ms, quit:%d\n", __FUNCTION__, quit);
+			usleep(1000);
+			if(quit) {
+				break;
+			}
+			continue;
+		}
+		/*
+		   printf("Get packet:ptr:%p, fd:%d, size:%zu, mode:%d, channel:%d, "
+		   "timestamp:%lld\n",
+		   RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetFD(mb), RK_MPI_MB_GetSize(mb),
+		   RK_MPI_MB_GetModeID(mb), RK_MPI_MB_GetChannelID(mb),
+		   RK_MPI_MB_GetTimestamp(mb));
+		   */
+#if 0
+		static int i=0;
+		if(100==i++)
+		{
+			FILE *_save_file = fopen("/tmp/out1000.jpg", "wb");
+			if(_save_file)
+			{
+				fwrite(RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetSize(mb), 1, _save_file);
+				fclose(_save_file);
+			}
+			else
+			{
+				printf("error !!! size:%d\n", RK_MPI_MB_GetSize(mb));
+				exit(1);
+			}
+		}
+		printf("i====================================>%d\n", i);
+#endif
+
+		if (save_file)
+			fwrite(RK_MPI_MB_GetPtr(mb), 1, RK_MPI_MB_GetSize(mb), save_file);
+		RK_MPI_MB_ReleaseBuffer(mb);
+	}
+	exit(1);
+
+	if (save_file)
+		fclose(save_file);
+
+	printf("%s exit %d\n", __func__, __LINE__);
+	return NULL;
+}
+
 static void *GetMediaBuffer(void *arg) {
   printf("#Start %s thread, arg:%p\n", __func__, arg);
   rga_demo_arg_t *crop_arg = (rga_demo_arg_t *)arg;
@@ -229,7 +305,8 @@ static void *GetMediaBuffer(void *arg) {
 
   while (!quit) {
 	  static int count = 0;;
-	  printf("=====================================>%d\n", count++);
+	  count++;
+	  printf("=====================================>%d\n", count);
     src_mb =
         RK_MPI_SYS_GetMediaBuffer(g_stViChn.enModId, g_stViChn.s32ChnId, -1);
     if (!src_mb) {
@@ -312,6 +389,19 @@ static void *GetMediaBuffer(void *arg) {
 		// break;
 		exit(1);
 	}
+#if 1
+	if(count%2==0)
+	{
+		ret = RK_MPI_SYS_SendMediaBuffer(RK_ID_VENC, 1, dst_mb);
+		if (ret) {
+			printf("ERROR: RK_MPI_SYS_SendMediaBuffer to VENC[1] failed! ret=%d\n",
+					ret);
+			RK_MPI_MB_ReleaseBuffer(dst_mb);
+			// break;
+			exit(1);
+		}
+	}
+#endif
 
 #if 1
 	ret = RK_MPI_SYS_SendMediaBuffer(RK_ID_VO, 0, dst_mb);
@@ -339,8 +429,8 @@ static void *GetMediaBuffer(void *arg) {
 
 int deinit_venc()
 {
-
 	RK_MPI_VENC_DestroyChn(0);
+	RK_MPI_VENC_DestroyChn(1);
 	return 0;
 }
 
@@ -392,6 +482,40 @@ int init_venc()
 		printf("ERROR: Create venc failed!\n");
 		exit(0);
 	}
+
+	if(1)
+	{
+		int chn = 1;
+		int u32Width = 1920;
+		int u32Height = 1080;
+
+		VENC_CHN_ATTR_S venc_chn_attr;
+		memset(&venc_chn_attr, 0, sizeof(venc_chn_attr));
+		venc_chn_attr.stVencAttr.enType = RK_CODEC_TYPE_MJPEG;
+		venc_chn_attr.stRcAttr.enRcMode = VENC_RC_MODE_MJPEGCBR;
+		venc_chn_attr.stRcAttr.stMjpegCbr.fr32DstFrameRateDen = 1;
+		// venc_chn_attr.stRcAttr.stMjpegCbr.fr32DstFrameRateNum = 60;
+		venc_chn_attr.stRcAttr.stMjpegCbr.fr32DstFrameRateNum = 30;
+		venc_chn_attr.stRcAttr.stMjpegCbr.u32SrcFrameRateDen = 1;
+		// venc_chn_attr.stRcAttr.stMjpegCbr.u32SrcFrameRateNum = 60;
+		venc_chn_attr.stRcAttr.stMjpegCbr.u32SrcFrameRateNum = 30;
+		//venc_chn_attr.stRcAttr.stMjpegCbr.u32BitRate = u32Width * u32Height * 8;
+		venc_chn_attr.stRcAttr.stMjpegCbr.u32BitRate = 70000000;//u32Width * u32Height * 8;
+		//venc_chn_attr.stRcAttr.stMjpegCbr.u32BitRate = 50000000;//u32Width * u32Height * 8;
+
+		venc_chn_attr.stVencAttr.imageType = IMAGE_TYPE_NV12;
+		venc_chn_attr.stVencAttr.u32PicWidth = u32Width;
+		venc_chn_attr.stVencAttr.u32PicHeight = u32Height;
+		venc_chn_attr.stVencAttr.u32VirWidth = u32Width;
+		venc_chn_attr.stVencAttr.u32VirHeight = u32Height;
+		venc_chn_attr.stVencAttr.u32Profile = 77;
+		ret = RK_MPI_VENC_CreateChn(chn, &venc_chn_attr);
+		if (ret) {
+			printf("ERROR: create VENC[1] error! ret=%d\n", ret);
+			exit(1);
+		}
+	}
+
 
 	return 0;
 }
@@ -624,6 +748,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+#if 0
   VENC_CHN_ATTR_S venc_chn_attr;
   memset(&venc_chn_attr, 0, sizeof(venc_chn_attr));
   venc_chn_attr.stVencAttr.enType = RK_CODEC_TYPE_H264;
@@ -646,14 +771,26 @@ int main(int argc, char *argv[]) {
   venc_chn_attr.stRcAttr.stH264Cbr.u32SrcFrameRateNum = 30;
 
   RK_MPI_VENC_CreateChn(g_stVencChn.s32ChnId, &venc_chn_attr);
+#endif
+  init_venc();
 
+  // venc
   pthread_t read_thread;
   pthread_create(&read_thread, NULL, GetMediaBuffer, &demo_arg);
-  pthread_t venc_thread;
 
-  //char *output_file = NULL;
-  const char *output_file = "out.h264";
-  pthread_create(&venc_thread, NULL, GetVencBuffer, (void *)output_file);
+  pthread_t venc_thread;
+  {
+	  char *output_file = NULL;
+	  //const char *output_file = "out.h264";
+	  pthread_create(&venc_thread, NULL, GetVencBuffer, (void *)output_file);
+  }
+
+  pthread_t read_venc1_thread;
+  {
+	  //const char *output_file = "test.jpeg";
+	  const char *output_file = NULL;
+	  pthread_create(&read_venc1_thread, NULL, GetJpgMediaBuffer, (void *)output_file);
+  }
 
   usleep(1000); // waite for thread ready.
   ret = RK_MPI_VI_StartStream(g_stViChn.s32DevId, g_stViChn.s32ChnId);
@@ -669,12 +806,15 @@ int main(int argc, char *argv[]) {
 
   printf("%s exit!\n", __func__);
   pthread_join(read_thread, NULL);
+  pthread_join(read_venc1_thread, NULL);
   pthread_join(venc_thread, NULL);
 
-  RK_MPI_VENC_DestroyChn(g_stVencChn.s32ChnId);
+  //RK_MPI_VENC_DestroyChn(g_stVencChn.s32ChnId);
+  deinit_venc();
+  RK_MPI_VO_DestroyChn(0);
+  printf("vichn=%d %d\n", g_stViChn.s32DevId, g_stViChn.s32ChnId);
   RK_MPI_VI_DisableChn(g_stViChn.s32DevId, g_stViChn.s32ChnId);
 
-  RK_MPI_VO_DestroyChn(0);
   RK_MPI_MB_POOL_Destroy(mbp);
 
   return 0;
