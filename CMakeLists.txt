@@ -5,8 +5,8 @@ set(CMAKE_CXX_STANDARD 11)
 #加载自定义模块
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-set(CMAKE_BUILD_TYPE "Debug")
-#set(CMAKE_BUILD_TYPE "Release")
+#set(CMAKE_BUILD_TYPE "Debug")
+set(CMAKE_BUILD_TYPE "Release")
 
 set(SYS_BUILD_TYPE "ARM64")
 
@@ -103,3 +103,6 @@ target_link_libraries(rkmedia_resolution_change easymedia rga drm rockchip_mpp a
 
 add_executable(rkmedia_vi_rga_crop_vo_venc_test rkmedia_vi_rga_crop_vo_venc_test.cpp zlm_use.c)
 target_link_libraries(rkmedia_vi_rga_crop_vo_venc_test easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN} mk_api)
+
+add_executable(rkmedia_vi_vo_test  rkmedia_vi_vo_test.c)
+target_link_libraries(rkmedia_vi_vo_test easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN} mk_api)
