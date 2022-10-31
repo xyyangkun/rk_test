@@ -74,7 +74,7 @@ endif ()
 LINK_DIRECTORIES(${LIBRARY_OUTPUT_PATH})
 
 #include_directories(include include/rkmedia rkmedia/ easymedia include/libdrm include/zlm)
-include_directories(rkmedia  ${SYSROOT_PATH}/usr/include/easymedia/)
+include_directories(rkmedia  ${SYSROOT_PATH}/usr/include/easymedia/ include/zlm)
 link_directories(lib lib/zlm lib/mali lib/zlog)
 
 ADD_DEFINITIONS(-DARM)
@@ -101,5 +101,5 @@ target_link_libraries(my_vo_display_test easymedia rga drm rockchip_mpp avformat
 add_executable(rkmedia_resolution_change rkmedia_resolution_change.c)
 target_link_libraries(rkmedia_resolution_change easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN})
 
-add_executable(rkmedia_vi_rga_crop_vo_venc_test rkmedia_vi_rga_crop_vo_venc_test.cpp)
-target_link_libraries(rkmedia_vi_rga_crop_vo_venc_test easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN})
+add_executable(rkmedia_vi_rga_crop_vo_venc_test rkmedia_vi_rga_crop_vo_venc_test.cpp zlm_use.c)
+target_link_libraries(rkmedia_vi_rga_crop_vo_venc_test easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN} mk_api)

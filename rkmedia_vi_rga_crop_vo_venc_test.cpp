@@ -19,7 +19,10 @@
 #include <rga/rga.h>
 #include "rkmedia_api.h"
 #include "rkmedia_venc.h"
-
+#define ZLM
+#ifdef ZLM
+#include "zlm_use.h"
+#endif
 #define SCREEN_WIDTH 1920 
 #define SCREEN_HEIGHT 1080
 int init_vo(int w, int h, const char *u32PlaneType);
@@ -207,14 +210,21 @@ static void *GetVencBuffer(void *arg) {
 		mb = RK_MPI_SYS_GetMediaBuffer(g_stVencChn.enModId, g_stVencChn.s32ChnId,
 				-1);
 		if (mb) {
+#if 0
 			printf(
 					"-Get Video Encoded packet():ptr:%p, fd:%d, size:%zu, mode:%d, time "
 					"= %llu.\n",
 					RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetFD(mb), RK_MPI_MB_GetSize(mb),
 					RK_MPI_MB_GetModeID(mb), RK_MPI_MB_GetTimestamp(mb));
+#endif
 
 			if (save_file)
 				fwrite(RK_MPI_MB_GetPtr(mb), 1, RK_MPI_MB_GetSize(mb), save_file);
+#ifdef ZLM
+			static unsigned int ts = 0;
+			ts = RK_MPI_MB_GetTimestamp(mb)/1000;
+			zlm_send0_h264((void*)RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetSize(mb), ts, ts);
+#endif
 			RK_MPI_MB_ReleaseBuffer(mb);
 		}
 	}
@@ -306,7 +316,7 @@ static void *GetMediaBuffer(void *arg) {
   while (!quit) {
 	  static int count = 0;;
 	  count++;
-	  printf("=====================================>%d\n", count);
+	  //printf("=====================================>%d\n", count);
     src_mb =
         RK_MPI_SYS_GetMediaBuffer(g_stViChn.enModId, g_stViChn.s32ChnId, -1);
     if (!src_mb) {
@@ -340,7 +350,7 @@ static void *GetMediaBuffer(void *arg) {
 
 
 
-	printf("%d %d %d %d %d\n", stImageInfo.u32Width, stImageInfo.u32Height, stImageInfo.u32HorStride, stImageInfo.u32VerStride, stImageInfo.enImgType);
+	// printf("%d %d %d %d %d\n", stImageInfo.u32Width, stImageInfo.u32Height, stImageInfo.u32HorStride, stImageInfo.u32VerStride, stImageInfo.enImgType);
 	// 转换为对应分辨率的mb 
 	dst_mb = RK_MPI_MB_ConvertToImgBuffer(dst_mb, &stImageInfo);
 	if (!dst_mb) {
@@ -440,7 +450,7 @@ int init_venc()
 	RK_U32 u32Height = 1080;
 	int ret;
 
-	RK_U32 u32Fps = 30;
+	RK_U32 u32Fps = 60;
 	VENC_RC_MODE_E enEncoderMode = VENC_RC_MODE_H264CBR;
 	VENC_CHN_ATTR_S venc_chn_attr;
 	memset(&venc_chn_attr, 0, sizeof(VENC_CHN_ATTR_S));
@@ -695,6 +705,9 @@ int main(int argc, char *argv[]) {
   signal(SIGINT, sigterm_handler);
 
   RK_MPI_SYS_Init();
+#ifdef ZLM
+  zlm_init(0, 60);
+#endif
 
 // Create buffer pool. Note that VO only support dma buffer.
   MB_POOL_PARAM_S stBufferPoolParam;
@@ -798,7 +811,12 @@ int main(int argc, char *argv[]) {
     printf("ERROR: Start Vi[0] failed! ret=%d\n", ret);
     return -1;
   }
-
+#ifdef ZLM
+  sleep(5);
+  // push
+  const char *url = "rtmp://172.20.2.7/live/media0";
+  zlm_push_start(url);
+#endif
   printf("%s initial finish\n", __func__);
   while (!quit) {
     usleep(500000);
@@ -819,6 +837,11 @@ int main(int argc, char *argv[]) {
   RK_MPI_VI_DisableChn(g_stViChn.s32DevId, g_stViChn.s32ChnId);
 
   RK_MPI_MB_POOL_Destroy(mbp);
+
+#ifdef ZLM
+  zlm_push_stop();
+  zlm_deinit();
+#endif
 
   return 0;
 }
