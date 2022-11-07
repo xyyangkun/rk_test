@@ -24,6 +24,7 @@ HEADERS += \
     mainwindow.h \
     muitemdelegate.h
 
+
 FORMS += \
     mainwindow.ui
 
@@ -34,3 +35,6 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 RESOURCES += \
     image.qrc
+
+INCLUDEPATH += ./
+LIBS += -L./ -lrkmedia_vi_vo -L ../ -leasymedia -lrga -ldrm -lrockchip_mpp
