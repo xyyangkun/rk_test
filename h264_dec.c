@@ -102,8 +102,8 @@ static int is_start = 1;
 static pthread_t thread_dec;
 static void *test_h264_dec_proc(void *param)
 {
-	//char *h264 = "./tennis200.h264";
-	char *h264 = "./1080P.h265";
+	char *h264 = "./tennis200.h264";
+	//char *h264 = "./1080P.h265";
 	
 	FILE* fp_h264_out = fopen("out.h264", "wb+");
 	FILE* fp_yuv = fopen("out.yuv", "wb+");

@@ -114,3 +114,6 @@ add_library(rkmedia_vi_vo SHARED librkmedia_vi_vo.c)
 # 使用前需要指定库位置环境变量: export LD_LIBRARY_PATH=./
 add_executable(test_librkmedia_vi_vo test_librkmedia_vi_vo.c)
 target_link_libraries(test_librkmedia_vi_vo easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN} mk_api rkmedia_vi_vo)
+
+
+add_subdirectory(mpp_encode)

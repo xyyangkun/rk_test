@@ -44,8 +44,8 @@ int vpu_decode_h264_init(struct vpu_h264_decode* decode, int width, int height)
         return -1;
     }
 
-	//MppCodingType type  = MPP_VIDEO_CodingAVC;
-	MppCodingType type  = MPP_VIDEO_CodingHEVC;
+	MppCodingType type  = MPP_VIDEO_CodingAVC;
+	//MppCodingType type  = MPP_VIDEO_CodingHEVC;
     ret = mpp_init(decode->mpp_ctx, MPP_CTX_DEC, type);
     if (MPP_OK != ret) {
         printf("mpp_init failed\n");
@@ -86,8 +86,23 @@ int vpu_decode_h264_init(struct vpu_h264_decode* decode, int width, int height)
         return MPP_ERR_NOMEM;
     }
 
+	RK_U32 fbc_en = 1;
+	MppFrameFormat format = MPP_FMT_YUV420SP;
+	mpp_env_set_u32("fbc_dec_en",  1);
+	mpp_env_get_u32("fbc_dec_en", &fbc_en, 0);
+	
+	if (fbc_en)
+	{
+		format = format | MPP_FRAME_FBC_AFBC_V2;
+	}
+	printf("yk debug decode fbc encode %d\n", fbc_en);
+
 	// yk add 
-    ret = mpi->control(mpp_ctx, MPP_DEC_SET_OUTPUT_FORMAT, MPP_FMT_YUV420SP);
+#if 1
+    ret = mpi->control(mpp_ctx, MPP_DEC_SET_OUTPUT_FORMAT, MPP_FMT_YUV420SP/*(MppParam)format*/);
+#else
+    ret = mpi->control(mpp_ctx, MPP_DEC_SET_OUTPUT_FORMAT, /*MPP_FMT_YUV420SP*/(MppParam)format);
+#endif
     if (MPP_OK != ret) {
 		printf("Failed to set output format (ret = %d)\n", ret);
 		return -3;
