@@ -22,6 +22,9 @@
 #include <memory>
 #include "easymedia/rkmedia_api.h"
 #include "easymedia/buffer.h"
+#include "h264_rkmedia_dec.h"
+
+#define USE_RKMEDIA_DEC
 
 std::shared_ptr<easymedia::ImageBuffer> ib;
 static bool quit = false;
@@ -32,11 +35,19 @@ int main()
 {
 	signal(SIGINT, sigterm_handler);
 
+#ifndef USE_RKMEDIA_DEC
 	start_test_h264_dec();
+#else
+	start_test_h264_rkmedia_dec();
+#endif
 
 	while(!quit) {
 		usleep(100*1000);
 	}
 	printf("==========================> will exit!\n");
+#ifndef USE_RKMEDIA_DEC
 	stop_test_h264_dec();
+#else
+	stop_test_h264_rkmedia_dec();
+#endif
 }

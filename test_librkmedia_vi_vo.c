@@ -33,11 +33,9 @@ static void sigterm_handler(int sig) {
   quit = true;
 }
 
-
-int main()
+int test_vi_in_vo_out()
 {
 	int ret;
-
 	ret = librkmedia_vi_vo_init();
 	assert(ret == 0);
 
@@ -50,6 +48,15 @@ int main()
 	ret = librkmedia_vi_vo_deinit();
 	assert(ret == 0);
 
-	printf("%s exit!\n", __func__);
+	printf("%s exit! ret= %d\n", __func__, ret);
+
+	return 0;
+}
+
+
+
+int main()
+{
+	//test_vi_in_vo_out();
 
 }

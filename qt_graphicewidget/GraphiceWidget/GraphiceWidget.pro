@@ -37,4 +37,4 @@ RESOURCES += \
     image.qrc
 
 INCLUDEPATH += ./
-LIBS += -L./ -lrkmedia_vi_vo -L ../ -leasymedia -lrga -ldrm -lrockchip_mpp
+LIBS += -L./ -lrkmedia_vi_vo -L ../ -leasymedia -lrga -ldrm -lrockchip_mpp -lrkmedia_vi_get_frame
