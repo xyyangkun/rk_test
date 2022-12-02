@@ -81,7 +81,7 @@ ADD_DEFINITIONS(-DARM)
 set(LINK_LIB_LIST m pthread asound avformat avdevice avcodec avfilter swresample avutil  rga drm rockchip_mpp  z asound v4l2 v4lconvert jpeg SDL2 SDL2_ttf easymedia freetype mali-bifrost-g52-g2p0-dummy ${LINK_ASAN} fdk-aac jemalloc png)
 
 
-add_executable(rktest h264_dec.c  test.cpp vpu_decode.c rk_h264_decode.c)
+add_executable(rktest test.cpp h264_dec.c h264_rkmedia_dec.c vpu_decode.c rk_h264_decode.c)
 target_link_libraries(rktest easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN})
 
 
@@ -115,5 +115,16 @@ add_library(rkmedia_vi_vo SHARED librkmedia_vi_vo.c)
 add_executable(test_librkmedia_vi_vo test_librkmedia_vi_vo.c)
 target_link_libraries(test_librkmedia_vi_vo easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN} mk_api rkmedia_vi_vo)
 
+# 生成动态库
+add_library(rkmedia_vi_get_frame SHARED librkmedia_vi_get_frame.c)
+
+# 使用动态库
+# 使用前需要指定库位置环境变量: export LD_LIBRARY_PATH=./
+add_executable(librkmedia_vi_get_frame_test librkmedia_vi_get_frame_test.c)
+target_link_libraries(librkmedia_vi_get_frame_test easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN} mk_api rkmedia_vi_get_frame)
+
+#h264 file parse
+add_executable(test_h264_file_parse test_h264_file_parse.c h264_file_parse.c)
 
 add_subdirectory(mpp_encode)
+#add_subdirectory(rockit)
