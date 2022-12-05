@@ -29,7 +29,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/time.h>
-#if 0
+#if 1
 #define print_fps(name) do {\
 	static int count=0; \
 	static struct timeval t_old = {0}; \

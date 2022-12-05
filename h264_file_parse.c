@@ -100,6 +100,7 @@ int yk_h264_parse(tyk_h264_parse *parse)
                 }
                 else
                 {
+					printf("yk debug read all file will break;!\n");
                     break;
                 }
             }

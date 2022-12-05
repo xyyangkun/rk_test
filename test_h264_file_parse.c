@@ -34,7 +34,6 @@ static void h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 	t_h264_dec *dec = (t_h264_dec *)param;
 
 	// 数据数据
-	if(bytes == 717718)
 	if(dec->fp_h264_out)fwrite(nalu, bytes, 1, dec->fp_h264_out);
 
 }

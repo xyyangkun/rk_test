@@ -126,5 +126,9 @@ target_link_libraries(librkmedia_vi_get_frame_test easymedia rga drm rockchip_mp
 #h264 file parse
 add_executable(test_h264_file_parse test_h264_file_parse.c h264_file_parse.c)
 
+# test h264 file decode
+add_executable(test_h264_file_decode test_h264_file_decode.c h264_file_parse.c)
+target_link_libraries(test_h264_file_decode easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN} mk_api )
+
 add_subdirectory(mpp_encode)
 #add_subdirectory(rockit)
