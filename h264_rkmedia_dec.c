@@ -145,6 +145,7 @@ static void *test_h264_dec_proc(void *param)
 	char *h264 = "../rk3568_1080p.h264";
 	//char *h264 = "./1080P.h265";
 	
+	printf("will open h264 file:%s\n", h264);
 	FILE* fp_h264_out = fopen("out.h264", "wb+");
 	FILE* fp_yuv = fopen("out.yuv", "wb+");
 	int ret;
@@ -171,8 +172,9 @@ static void *test_h264_dec_proc(void *param)
 
 	VDEC_CHN_ATTR_S stVdecAttr={0};
 	stVdecAttr.enCodecType = RK_CODEC_TYPE_H264;
-	stVdecAttr.enMode = VIDEO_MODE_FRAME;
-	//stVdecAttr.enMode = VIDEO_MODE_STREAM;
+	//stVdecAttr.enMode = VIDEO_MODE_FRAME;
+	// 很奇怪,要使用stream模式才能正确解码
+	stVdecAttr.enMode = VIDEO_MODE_STREAM;
 	stVdecAttr.enDecodecMode = VIDEO_DECODEC_HADRWARE;
 	ret = RK_MPI_VDEC_CreateChn(0, &stVdecAttr);
 	if(ret)

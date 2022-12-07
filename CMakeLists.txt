@@ -5,8 +5,8 @@ set(CMAKE_CXX_STANDARD 11)
 #加载自定义模块
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-#set(CMAKE_BUILD_TYPE "Debug")
-set(CMAKE_BUILD_TYPE "Release")
+set(CMAKE_BUILD_TYPE "Debug")
+#set(CMAKE_BUILD_TYPE "Release")
 
 set(SYS_BUILD_TYPE "ARM64")
 
@@ -81,7 +81,7 @@ ADD_DEFINITIONS(-DARM)
 set(LINK_LIB_LIST m pthread asound avformat avdevice avcodec avfilter swresample avutil  rga drm rockchip_mpp  z asound v4l2 v4lconvert jpeg SDL2 SDL2_ttf easymedia freetype mali-bifrost-g52-g2p0-dummy ${LINK_ASAN} fdk-aac jemalloc png)
 
 
-add_executable(rktest test.cpp h264_dec.c h264_rkmedia_dec.c vpu_decode.c rk_h264_decode.c)
+add_executable(rktest test.cpp h264_dec.c h264_rkmedia_dec.c vpu_decode.c rk_h264_decode.c mb_get.cpp)
 target_link_libraries(rktest easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN})
 
 
@@ -129,6 +129,10 @@ add_executable(test_h264_file_parse test_h264_file_parse.c h264_file_parse.c)
 # test h264 file decode
 add_executable(test_h264_file_decode test_h264_file_decode.c h264_file_parse.c)
 target_link_libraries(test_h264_file_decode easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN} mk_api )
+
+#测试 rkmedia c++代码
+add_executable(test_easymedia test_easymedia.cpp mb_get.cpp)
+target_link_libraries(test_easymedia easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN} mk_api )
 
 add_subdirectory(mpp_encode)
 #add_subdirectory(rockit)

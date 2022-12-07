@@ -50,5 +50,32 @@
 #define ALIGN16(value) ((value + 15) & (~15))
 #endif
 
+#define DEBUG
+#ifdef DEBUG
+static int _dbg=1;
+
+/// \brief 初始化是否要运行测试
+/// \param void
+/// \return void
+static void _dbg_init(void)
+{
+#ifdef MODULE 
+	if (getenv("dbg") || getenv(MODULE))
+#else
+	if (getenv("dbg"))
+#endif
+    {
+        _dbg=1;
+    }
+}
+#define dbg(fmt, args...)\
+    do {\
+        if (_dbg){printf("[%s %d]"fmt, __FUNCTION__, __LINE__, ##args);}\
+	}\
+    while(0)
+#else
+    #define dbg(fmt, args...)
+    #define _dbg_init()
+#endif
 
 #endif//_MYUTILS_H_

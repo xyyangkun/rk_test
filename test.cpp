@@ -24,7 +24,8 @@
 #include "easymedia/buffer.h"
 #include "h264_rkmedia_dec.h"
 
-#define USE_RKMEDIA_DEC
+// 使用rkmedia解码, 注释后直接使用mpp库解码
+// #define USE_RKMEDIA_DEC
 
 std::shared_ptr<easymedia::ImageBuffer> ib;
 static bool quit = false;
@@ -34,10 +35,13 @@ static void sigterm_handler(int sig) {
 int main()
 {
 	signal(SIGINT, sigterm_handler);
+	signal(SIGTERM, sigterm_handler);
 
 #ifndef USE_RKMEDIA_DEC
+	// mpp 解码
 	start_test_h264_dec();
 #else
+	// rkmedia 解码
 	start_test_h264_rkmedia_dec();
 #endif
 

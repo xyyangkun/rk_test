@@ -21,9 +21,13 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdbool.h>
+#include "mb_get.h"
+#include "myutils.h"
 
 int vpu_decode_h264_init(struct vpu_h264_decode* decode, int width, int height)
 {
+	_dbg_init();
     int ret;
     decode->in_width = width;
     decode->in_height = height;
@@ -56,7 +60,10 @@ int vpu_decode_h264_init(struct vpu_h264_decode* decode, int width, int height)
     MppApi* mpi = decode->mpi;
     MppCtx mpp_ctx = decode->mpp_ctx;
 	MppParam param      = NULL;
-	RK_U32 need_split   = 1;
+
+	// 不用分包, 外部已经将h264分割
+	RK_U32 need_split   = 0;
+
 	MpiCmd mpi_cmd      = MPP_CMD_BASE;
 	mpi_cmd = MPP_DEC_SET_PARSER_SPLIT_MODE;
 	param = &need_split;
@@ -86,6 +93,32 @@ int vpu_decode_h264_init(struct vpu_h264_decode* decode, int width, int height)
         return MPP_ERR_NOMEM;
     }
 
+	//int fg_limit_num = 100;
+	int fg_limit_num = 0;
+	if (fg_limit_num > 0) {
+		MppBufferGroup frame_group;
+		ret = mpp_buffer_group_get_internal(&frame_group,
+				MPP_BUFFER_TYPE_ION);
+		if (ret != MPP_OK) {
+			printf("Failed to retrieve buffer group (ret = %d)\n", ret);
+			exit(1);
+			return false;
+		}
+		ret = mpi->control(mpp_ctx, MPP_DEC_SET_EXT_BUF_GROUP, frame_group);
+		if (ret != MPP_OK) {
+			printf("Failed to assign buffer group (ret = %d)\n", ret);
+			exit(1);
+			return false;
+		}
+		ret = mpp_buffer_group_limit_config(frame_group, 0, fg_limit_num);
+		if (ret != MPP_OK) {
+			printf("Failed to set buffer group limit (ret = %d)\n", ret);
+			return false;
+		}
+		printf("mpi set group limit = %d\n", fg_limit_num);
+	}
+
+#if 0
 	RK_U32 fbc_en = 1;
 	MppFrameFormat format = MPP_FMT_YUV420SP;
 	mpp_env_set_u32("fbc_dec_en",  1);
@@ -96,6 +129,7 @@ int vpu_decode_h264_init(struct vpu_h264_decode* decode, int width, int height)
 		format = format | MPP_FRAME_FBC_AFBC_V2;
 	}
 	printf("yk debug decode fbc encode %d\n", fbc_en);
+#endif
 
 	// yk add 
 #if 1
@@ -128,10 +162,11 @@ void dump_mpp_frame_to_file(MppFrame frame, FILE *fp)
     v_stride = mpp_frame_get_ver_stride(frame);
     buffer   = mpp_frame_get_buffer(frame);
 
+	// mpp_buffer_get_fd
     base = (RK_U8 *)mpp_buffer_get_ptr(buffer);
     RK_U32 buf_size = mpp_frame_get_buf_size(frame);
     size_t base_length = mpp_buffer_get_size(buffer);
-    //mpp_log("base_length = %d\n",base_length);
+    printf("====================> base_length = %ld buf_size:%d\n",base_length, buf_size);
 
     RK_U32 i;
     RK_U8 *base_y = base;
@@ -168,7 +203,7 @@ void dump_mpp_frame_to_file(MppFrame frame, FILE *fp)
 
 
 int vpu_decode_h264_doing(struct vpu_h264_decode* decode, void* in_data, RK_S32 in_size,
-                          int out_fd, void* out_data, int *dtype)
+                          int (*handler)(void* param, void *mb))
 {
 	RK_U32 pkt_done = 0;
 	RK_U32 pkt_eos  = 0;
@@ -178,7 +213,7 @@ int vpu_decode_h264_doing(struct vpu_h264_decode* decode, void* in_data, RK_S32 
 	MppApi *mpi = decode->mpi;
 	MppPacket packet = NULL;
 	MppFrame  frame  = NULL;
-	size_t read_size = 0;
+	//size_t read_size = 0;
 
 
 	ret = mpp_packet_init(&packet, in_data, in_size);
@@ -248,7 +283,7 @@ try_again:
 					MppBuffer buffer    = NULL;
 					buffer   = mpp_frame_get_buffer(frame);
 
-					printf("get buf=%p, len=%d\n", mpp_buffer_get_ptr(buffer), mpp_frame_get_buf_size(frame));
+					printf("==============>in decode get buf=%p, len=%ld\n", mpp_buffer_get_ptr(buffer), mpp_frame_get_buf_size(frame));
 					if (decode->fp_output && !err_info){
 						//cv::Mat rgbImg;
 						//YUV420SP2Mat(frame, rgbImg);
@@ -256,9 +291,52 @@ try_again:
 
 						dump_mpp_frame_to_file(frame, decode->fp_output);
 					}
+					buffer   = mpp_frame_get_buffer(frame);
+					dbg("------------buf size buffer:%p :%ld\n", buffer, mpp_buffer_get_size(buffer));
+#if 1
+					// 将mpp内存转换为mpp内存传出
+					if(0 != mpp_buffer_get_size(buffer))
+					{
+						dbg("yk debug!\n");
+						MEDIA_BUFFER _hd = RK_MPI_MB_from_mpp(frame);
+						dbg("yk debug!\n");
+						//RK_MPI_MB_ReleaseBuffer(*(MEDIA_BUFFER *)_hd);
+						dbg("yk debug!\n");
+						//*(MEDIA_BUFFER *)_hd = NULL;
+
+						if(*(MEDIA_BUFFER *)_hd == NULL)
+						{
+							dbg("error in rk_mpi_mb_from mpp!, will exit(1)\n");
+							exit(1);
+						}
+
+						if(handler)
+						{
+							int ret;
+							ret = handler(NULL, _hd);
+							if(ret != 0)
+							{
+								// todo 
+							}
+						}
+						else
+						{
+						RK_MPI_MB_release(_hd);
+						}
+
+					}else
+					{
+						// todo 为什么 size会为0
+
+						// 为0 时，要内部释放
+						mpp_frame_deinit(&frame);
+					}
+#endif
 				}
-				frm_eos = mpp_frame_get_eos(frame);
-				mpp_frame_deinit(&frame);
+
+				// 由内存外部释放
+				//frm_eos = mpp_frame_get_eos(frame);
+				//mpp_frame_deinit(&frame);
 
 				frame = NULL;
 				get_frm = 1;

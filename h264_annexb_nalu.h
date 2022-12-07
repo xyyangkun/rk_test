@@ -43,7 +43,7 @@ static const uint8_t* h264_startcode(const uint8_t *data, size_t bytes)
 }
 
 ///@param[in] h264 H.264 byte stream format data(A set of NAL units)
-static int mpeg4_h264_annexb_nalu(const void* h264, size_t bytes, void (*handler)(void* param, const uint8_t* nalu, size_t bytes), void* param)
+static int mpeg4_h264_annexb_nalu(const void* h264, size_t bytes, int (*handler)(void* param, const uint8_t* nalu, size_t bytes), void* param)
 {
 	ptrdiff_t n;
 	const uint8_t* p, *next, *end;
@@ -78,7 +78,12 @@ static int mpeg4_h264_annexb_nalu(const void* h264, size_t bytes, void (*handler
 		{
 			//handler(param, p, (int)n);
 			//handler(param, p-4, (int)(n+4)); // 可能存在 00 00 01这种情况
-			handler(param, p-_hl, (int)(n+_hl));
+			int ret = handler(param, p-_hl, (int)(n+_hl));
+			if(ret < 0)
+			{
+				printf("call back return -1!, will return -1\n");
+				return -1;
+			}
 		}
 		_hl = hl;
 		p = next;
