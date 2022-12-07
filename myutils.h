@@ -52,12 +52,12 @@
 
 #define DEBUG
 #ifdef DEBUG
-static int _dbg=1;
+static int _dbg=0;
 
 /// \brief 初始化是否要运行测试
 /// \param void
 /// \return void
-static void _dbg_init(void)
+static void _dbg_init()
 {
 #ifdef MODULE 
 	if (getenv("dbg") || getenv(MODULE))

@@ -23,10 +23,11 @@
 #include "h264_dec.h"
 #include "rk_h264_decode.h"
 #include "h264_annexb_nalu.h"
-#include "easymedia/rkmedia_api.h"
-#include "myutils.h"
 
 #include "mb_get.h"
+
+#define MODULE "h264_dec"
+#include "myutils.h"
 
 // 解码后调用显示
 #define VDEC_DISPLAY
@@ -163,12 +164,15 @@ static int h264_vdec_handle(void *param, void *mb)
 }
 
 
+static unsigned long long _pts = 0;
+#define _DIFF 20
 // 获得h264 帧，可以进行解码
 static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 {
 	int mark = 0;
 	int ret;
-	dbg("===============>yk debug!, param=%p==>nalu %ld== %02x %02x %02x %02x\n", param, bytes, nalu[0], nalu[1], nalu[2], nalu[3]);
+	dbg("===============>yk debug!, param=%p==>nalu %ld== %02x %02x %02x %02x %02x\n",
+			param, bytes, nalu[0], nalu[1], nalu[2], nalu[3], nalu[4]);
 	t_h264_dec *dec = (t_h264_dec*)param;
 
 	if(is_start != 1)
@@ -178,8 +182,6 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 	}
 	// 写入解析出来的h264帧
 	if(dec->fp_h264_out)fwrite(nalu, bytes, 1, dec->fp_h264_out);
-
-
 
 	// 进行解码
 	MEDIA_BUFFER mb;
@@ -197,10 +199,22 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 		exit(1);
 	}
 	memcpy(RK_MPI_MB_GetPtr(mb), nalu, bytes);
+
+	// 有些nalu 时间戳不应该累加
+	unsigned char nalu_type = nalu[4]&0xff;
+	if(0x67 != nalu_type && 0x68 != nalu_type)
+	{
+		_pts += _DIFF;
+	}
+	dbg("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< h264 pts:%llu\n", _pts);
+	RK_MPI_MB_SetTimestamp(mb, _pts);
+
 	dbg("%s %d size===>%lu\n", __FUNCTION__, __LINE__, RK_MPI_MB_GetSize(mb));
 
-	ret = vpu_decode_h264_doing(&dec->dec, RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetSize(mb),
-			&h264_vdec_handle);
+	int size;
+	void *mb_array[10];
+	ret = vpu_decode_h264_doing(&dec->dec, mb,
+			&mb_array[0], &size);
 			
 	if(ret !=0 )
 	{
@@ -217,15 +231,64 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 	}
 #endif
 
-	_count ++;
+	// 解码出数据
+	if(size > 0)
+	{
+		// 遍历解码后的数据，进行处理
+		for(int i=0; i<size; i++)
+		{
+			_count ++;
+			MEDIA_BUFFER _mb = (MEDIA_BUFFER)mb_array[i];
+			if(mb == NULL)
+			{
+				dbg("error in get mb null!, will exit\n");
+				exit(1);
+			}
+	
+#ifdef VDEC_DISPLAY
+			// 送显
+			ret = RK_MPI_SYS_SendMediaBuffer(RK_ID_VO, 0, _mb);
+			if(ret != 0)
+			{
+				printf("error to send mb to vo display!, will exit\n");
+				exit(0);
+			}
+#endif
+			//ret = RK_MPI_MB_ReleaseBuffer(_mb);
+			ret = RK_MPI_MB_release(_mb);
+			if(ret != 0)
+			{
+				printf("error in release dec buff!\n");
+				exit(1);
+			}
+			static long long pts_old = 0, pts_new = 0;
+			pts_new = RK_MPI_MB_GetTimestamp(_mb);
+			dbg(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> get dec pts:%llu\n", pts_new);
+			// 检测解码后pts 值是否正确
+			if(pts_old != 0)
+			{
+				if(pts_new - pts_old != _DIFF)
+				{
+					dbg("error in pts diff!!, will exit!\n");
+					exit(1);
+				}
+			}
+			pts_old = pts_new;
+
+		}
+
+	}
+
 	dbg("decode frame num:%d\n", _count);
+#if 0
 	if(_count > 1200)
 	{
 		mark = 1;
 	}
+#endif
 
 	// 进行延时
-	//usleep(500*1000);
+	usleep(17*1000);
 
 
 	// 释放数据

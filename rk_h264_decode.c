@@ -23,8 +23,8 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include "mb_get.h"
+#define MODULE "rk_h264_decode"
 #include "myutils.h"
-
 int vpu_decode_h264_init(struct vpu_h264_decode* decode, int width, int height)
 {
 	_dbg_init();
@@ -202,9 +202,17 @@ void dump_mpp_frame_to_file(MppFrame frame, FILE *fp)
 }
 
 
-int vpu_decode_h264_doing(struct vpu_h264_decode* decode, void* in_data, RK_S32 in_size,
-                          int (*handler)(void* param, void *mb))
+int vpu_decode_h264_doing(struct vpu_h264_decode* decode, void *mb_in, 
+                          void *mb_array[], int *size)
 {
+	MEDIA_BUFFER mb = (MEDIA_BUFFER)mb_in;
+	void* in_data;
+	RK_S32 in_size;
+	in_data = RK_MPI_MB_GetPtr(mb);
+	in_size = RK_MPI_MB_GetSize(mb);
+	RK_U64 pts = RK_MPI_MB_GetTimestamp(mb);
+	RK_U64 dts = RK_MPI_MB_GetTimestamp(mb);
+
 	RK_U32 pkt_done = 0;
 	RK_U32 pkt_eos  = 0;
 	RK_U32 err_info = 0;
@@ -217,7 +225,11 @@ int vpu_decode_h264_doing(struct vpu_h264_decode* decode, void* in_data, RK_S32 
 
 
 	ret = mpp_packet_init(&packet, in_data, in_size);
-	mpp_packet_set_pts(packet, 0); // todo 要设置时间戳
+	mpp_packet_set_pts(packet, pts); // todo 要设置时间戳
+	mpp_packet_set_dts(packet, dts); // todo 要设置时间戳
+
+	// size 设置为0
+	*size = 0;
 
 	do {
 		RK_S32 times = 5;
@@ -295,13 +307,18 @@ try_again:
 					dbg("------------buf size buffer:%p :%ld\n", buffer, mpp_buffer_get_size(buffer));
 #if 1
 					// 将mpp内存转换为mpp内存传出
-					if(0 != mpp_buffer_get_size(buffer))
+					//if(0 != mpp_buffer_get_size(buffer))
+					if(0 != mpp_buffer_get_size(buffer) && !err_info)
 					{
-						dbg("yk debug!\n");
 						MEDIA_BUFFER _hd = RK_MPI_MB_from_mpp(frame);
-						dbg("yk debug!\n");
+
+						RK_U64 _pts = mpp_frame_get_pts(frame);
+						RK_U64 _dts = mpp_frame_get_dts(frame);
+						(void)_dts;
+						// 设置时间戳
+						RK_MPI_MB_SetTimestamp(_hd, _pts);
+
 						//RK_MPI_MB_ReleaseBuffer(*(MEDIA_BUFFER *)_hd);
-						dbg("yk debug!\n");
 						//*(MEDIA_BUFFER *)_hd = NULL;
 
 						if(*(MEDIA_BUFFER *)_hd == NULL)
@@ -310,14 +327,11 @@ try_again:
 							exit(1);
 						}
 
-						if(handler)
+						// 小于10个， 才会存储到数组中
+						if(*size < 10)
 						{
-							int ret;
-							ret = handler(NULL, _hd);
-							if(ret != 0)
-							{
-								// todo 
-							}
+							mb_array[*size] = _hd;
+							*size = *size + 1;
 						}
 						else
 						{

@@ -55,8 +55,9 @@ struct vpu_h264_decode {
 
 
 int vpu_decode_h264_init(struct vpu_h264_decode* decode, int width, int height);
-int vpu_decode_h264_doing(struct vpu_h264_decode* decode, void* in_data, RK_S32 in_size,
-                          int (*handler)(void* param, void *mb));
+//int (*handler)(void* param, void *mb))
+int vpu_decode_h264_doing(struct vpu_h264_decode* decode, void *mb_in,
+                          void *mb_array[], int *size);
 int vpu_decode_h264_done(struct vpu_h264_decode* decode);
 
 

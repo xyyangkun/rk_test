@@ -6,6 +6,10 @@
  *    时间戳 mpp_frame_get_pts(mppframe)
  *    mb->SetUSTimeStamp(mpp_frame_get_pts(mppframe)); 
  *    auto pts = mpp_frame_get_pts(frame);
+ *    mpp_frame_get_pts
+ *    mpp_frame_set_pts
+ *    mpp_frame_get_dts
+ *    mpp_frame_set_dts
  *
  *        Version:  1.0
  *        Created:  2022年12月06日 15时09分38秒
@@ -79,7 +83,7 @@ public:
   ~_MPPFrameContext() {
 	if(frame == NULL)
 	{
-		printf("!!!!!error in deinit!\n");
+		printf("!!!!!error in deinit!, will exit\n");
 		exit(1);
 	}
     if (frame)
@@ -93,7 +97,7 @@ private:
 
 static int __free_mppframecontext(void *p) {
   assert(p);
-  printf("===============================> yk debug ! will release vdec buff!\n");
+  //printf("===============================> yk debug ! will release vdec buff!\n");
   delete (_MPPFrameContext *)p;
   return 0;
 }
@@ -235,8 +239,10 @@ MEDIA_BUFFER RK_MPI_MB_from_mpp(MppFrame mppframe)
 
 	mb->rkmedia_mb = rkmedia_mb;
 	//printf("yk debug %s %d!\n", __FUNCTION__, __LINE__);
+#if 0
 	printf("=============>>>>>>>>>>>>>>>>>>  mppframe=%p, buff size:%lu ===> %p %p\n",
 			mppframe, mb->rkmedia_mb->GetValidSize(), mb, rkmedia_mb);
+#endif
 
 #endif
   //mb->rkmedia_mb->SetValidSize(buf_size);
@@ -262,10 +268,11 @@ int RK_MPI_MB_release(MEDIA_BUFFER mb)
 	MEDIA_BUFFER_IMPLE *mb_impl = (MEDIA_BUFFER_IMPLE *)mb;
 	if (!mb)
 	{
+		printf("error in rlease mb !\n");
 		return -1;
 	}
 
-	printf("============<<<<<<<<<<<<<<<<<<<<<<<<%p %p\n", (void *)mb, mb_impl->rkmedia_mb);
+	// printf("============<<<<<<<<<<<<<<<<<<<<<<<<%p %p\n", (void *)mb,*(char *)&(mb_impl->rkmedia_mb));
 
 	if (mb_impl->rkmedia_mb)
 		mb_impl->rkmedia_mb.reset();
