@@ -25,6 +25,7 @@
 #include "h264_annexb_nalu.h"
 
 #include "mb_get.h"
+#include "list.h"
 
 #define MODULE "h264_dec"
 #include "myutils.h"
@@ -115,6 +116,12 @@ static uint8_t* file_read(const char* file, long* size)
 
 	return NULL;
 }
+typedef struct mylist_s
+{
+	char str[40];
+	void *hd;
+	list_t list;
+}mylist;
 
 typedef struct s_h264_dec
 {
@@ -122,11 +129,12 @@ typedef struct s_h264_dec
 	FILE *fp_h264_out;
 	struct vpu_h264_decode dec;
 	MEDIA_BUFFER_POOL mbp;
+	list_t head;
 }t_h264_dec;
 
 static int _count = 0;
 
-
+#if 0
 // 解码后获取数据回调
 static int h264_vdec_handle(void *param, void *mb)
 {
@@ -150,8 +158,8 @@ static int h264_vdec_handle(void *param, void *mb)
 			exit(0);
 		}
 #endif
-		//ret = RK_MPI_MB_ReleaseBuffer(_mb);
-		ret = RK_MPI_MB_release(_mb);
+		ret = RK_MPI_MB_ReleaseBuffer(_mb);
+		//ret = RK_MPI_MB_release(_mb);
 		if(ret != 0)
 		{
 			printf("error in release dec buff!\n");
@@ -162,6 +170,7 @@ static int h264_vdec_handle(void *param, void *mb)
 
 	return 0;
 }
+#endif
 
 
 static unsigned long long _pts = 0;
@@ -244,6 +253,7 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 				dbg("error in get mb null!, will exit\n");
 				exit(1);
 			}
+
 	
 #ifdef VDEC_DISPLAY
 			// 送显
@@ -254,8 +264,8 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 				exit(0);
 			}
 #endif
-			//ret = RK_MPI_MB_ReleaseBuffer(_mb);
-			ret = RK_MPI_MB_release(_mb);
+			ret = RK_MPI_MB_ReleaseBuffer(_mb);
+			//ret = RK_MPI_MB_release(_mb);
 			if(ret != 0)
 			{
 				printf("error in release dec buff!\n");
@@ -265,6 +275,7 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 			pts_new = RK_MPI_MB_GetTimestamp(_mb);
 			dbg(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> get dec pts:%llu\n", pts_new);
 			// 检测解码后pts 值是否正确
+#if 0
 			if(pts_old != 0)
 			{
 				if(pts_new - pts_old != _DIFF)
@@ -273,6 +284,7 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 					exit(1);
 				}
 			}
+#endif
 			pts_old = pts_new;
 
 		}
@@ -352,6 +364,8 @@ static void *test_h264_dec_proc(void *param)
 		exit(1);
 	}
 
+	list_init(&dec.head);
+
 	// 读取h264文件
 	long bytes = 0;
 	uint8_t* ptr = file_read(h264, &bytes);
@@ -359,7 +373,10 @@ static void *test_h264_dec_proc(void *param)
 		uint8_t *p = ptr;
 		// 解析h264文件
 		ret = mpeg4_h264_annexb_nalu(p, bytes, h264_handler, (void*)&dec);
-		//if(ret == 0)break;
+		// 文件读取结束会返回0
+		//if(ret == 0){ dbg("annexb nalu return 0\n"); break;}
+
+		// 返回退出
 		if(ret < 0)
 		{
 			dbg("will break!\n");

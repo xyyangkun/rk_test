@@ -93,24 +93,23 @@ int vpu_decode_h264_init(struct vpu_h264_decode* decode, int width, int height)
         return MPP_ERR_NOMEM;
     }
 
-	//int fg_limit_num = 100;
-	int fg_limit_num = 0;
+	int fg_limit_num = 100;
+	//int fg_limit_num = 0;
 	if (fg_limit_num > 0) {
-		MppBufferGroup frame_group;
-		ret = mpp_buffer_group_get_internal(&frame_group,
+		ret = mpp_buffer_group_get_internal(&decode->frm_grp,
 				MPP_BUFFER_TYPE_ION);
 		if (ret != MPP_OK) {
 			printf("Failed to retrieve buffer group (ret = %d)\n", ret);
 			exit(1);
 			return false;
 		}
-		ret = mpi->control(mpp_ctx, MPP_DEC_SET_EXT_BUF_GROUP, frame_group);
+		ret = mpi->control(mpp_ctx, MPP_DEC_SET_EXT_BUF_GROUP, decode->frm_grp);
 		if (ret != MPP_OK) {
 			printf("Failed to assign buffer group (ret = %d)\n", ret);
 			exit(1);
 			return false;
 		}
-		ret = mpp_buffer_group_limit_config(frame_group, 0, fg_limit_num);
+		ret = mpp_buffer_group_limit_config(decode->frm_grp, 0, fg_limit_num);
 		if (ret != MPP_OK) {
 			printf("Failed to set buffer group limit (ret = %d)\n", ret);
 			return false;
@@ -335,7 +334,8 @@ try_again:
 						}
 						else
 						{
-						RK_MPI_MB_release(_hd);
+							RK_MPI_MB_ReleaseBuffer(_hd);
+							//RK_MPI_MB_release(_hd);
 						}
 
 					}else
@@ -361,6 +361,7 @@ try_again:
 				size_t usage = mpp_buffer_group_usage(decode->frm_grp);
 				if (usage > decode->max_usage)
 					decode->max_usage = usage;
+				dbg("==============> max_usage:%lu\n", usage);
 			}
 
 			// if last packet is send but last frame is not found continue

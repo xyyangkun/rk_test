@@ -74,7 +74,7 @@ endif ()
 LINK_DIRECTORIES(${LIBRARY_OUTPUT_PATH})
 
 #include_directories(include include/rkmedia rkmedia/ easymedia include/libdrm include/zlm)
-include_directories(rkmedia  ${SYSROOT_PATH}/usr/include/easymedia/ include/zlm)
+include_directories(include rkmedia  ${SYSROOT_PATH}/usr/include/easymedia/ include/zlm)
 link_directories(lib lib/zlm lib/mali lib/zlog)
 
 ADD_DEFINITIONS(-DARM)

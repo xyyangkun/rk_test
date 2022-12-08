@@ -32,10 +32,10 @@ static bool quit = false;
 static void sigterm_handler(int sig) {
 	quit = true;
 }
-int main()
+
+// 单纯的测试解码
+int test_dec()
 {
-	signal(SIGINT, sigterm_handler);
-	signal(SIGTERM, sigterm_handler);
 
 #ifndef USE_RKMEDIA_DEC
 	// mpp 解码
@@ -54,4 +54,59 @@ int main()
 #else
 	stop_test_h264_rkmedia_dec();
 #endif
+
+
+	return 0;
+}
+
+// 测试多次解码，解码后释放解码器，再次创建解码
+int test_decs()
+{
+	// 运行次数
+	int times = 2;
+
+	for(int i=0; i<times; i++)
+	{
+		quit = false;;
+#ifndef USE_RKMEDIA_DEC
+		// mpp 解码
+		start_test_h264_dec();
+#else
+		// rkmedia 解码
+		start_test_h264_rkmedia_dec();
+#endif
+
+		// 间隔延迟
+		while(!quit) {
+			usleep(100*1000);
+		}
+
+		printf("==========================> will exit!\n");
+#ifndef USE_RKMEDIA_DEC
+		stop_test_h264_dec();
+#else
+		stop_test_h264_rkmedia_dec();
+#endif
+	}
+
+	return 0;
+
+}
+
+int main()
+{
+	signal(SIGINT, sigterm_handler);
+	signal(SIGTERM, sigterm_handler);
+
+	int ch = 0;
+	if (ch == 0)
+	{
+		test_dec();
+	}
+
+	if (ch == 1)
+	{
+		test_decs();
+	}
+
 }
