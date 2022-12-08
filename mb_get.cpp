@@ -25,6 +25,7 @@
 #include "buffer.h"
 #include "rkmedia_buffer.h"
 #include "rkmedia_buffer_impl.h"
+#include "rkmedia_api.h"
 
 namespace easymedia { 
 
@@ -245,6 +246,10 @@ MEDIA_BUFFER RK_MPI_MB_from_mpp(MppFrame mppframe)
 #endif
 
 #endif
+  ImageInfo &info = rkmedia_mb->GetImageInfo();
+  MB_IMAGE_INFO_S mb_info = {(RK_U32)info.width, (RK_U32)info.height, 
+	  (RK_U32)info.vir_width, (RK_U32)info.vir_height, IMAGE_TYPE_NV12};
+
   //mb->rkmedia_mb->SetValidSize(buf_size);
   mb->ptr = mb->rkmedia_mb->GetPtr();
   mb->fd = mb->rkmedia_mb->GetFD();
@@ -253,6 +258,7 @@ MEDIA_BUFFER RK_MPI_MB_from_mpp(MppFrame mppframe)
   mb->size = mb->rkmedia_mb->GetValidSize();//buf_size;
   mb->type = MB_TYPE_IMAGE;
   //mb->stImageInfo = *pstImageInfo;
+  mb->stImageInfo = mb_info;
   // todo 需要时间戳
   mb->timestamp = 0;
   mb->mode_id = RK_ID_UNKNOW;

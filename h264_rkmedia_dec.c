@@ -25,6 +25,9 @@
 #include "easymedia/rkmedia_api.h"
 #include "myutils.h"
 
+// 解码后调用显示
+#define VDEC_DISPLAY
+
 static int is_start = 1;
 static pthread_t thread_dec;
 
@@ -85,7 +88,8 @@ static void h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 		exit(1);
 	}
 	printf("%s %d\n", __FUNCTION__, __LINE__);
-	usleep(5*1000);
+	//usleep(5*1000);
+	usleep(20*1000);
 
 
 	// 写入解码后数据
@@ -122,7 +126,7 @@ static void *GetMediaBuffer(void *arg)
 	print_fps("==================> recv h264=");
 
 #if 1
-		printf("Get Frame:ptr:%p, fd:%d, size:%zu, mode:%d, channel:%d, "            
+		printf(">>>>Get Frame:ptr:%p, fd:%d, size:%zu, mode:%d, channel:%d, "            
 				"timestamp:%lld, ImgInfo:<wxh %dx%d, fmt 0x%x>\n",                   
 				RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetFD(mb), RK_MPI_MB_GetSize(mb), 
 				RK_MPI_MB_GetModeID(mb), RK_MPI_MB_GetChannelID(mb),                 
@@ -134,6 +138,17 @@ static void *GetMediaBuffer(void *arg)
 		{
 			//fwrite(RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetSize(mb), 1, dec->fp_yuv);
 		}
+#ifdef VDEC_DISPLAY
+			// 送显
+			ret = RK_MPI_SYS_SendMediaBuffer(RK_ID_VO, 0, mb);
+			if(ret != 0)
+			{
+				printf("error to send _mb to vo display!, will exit\n");
+				exit(0);
+			}
+
+#endif
+	
 
 		RK_MPI_MB_ReleaseBuffer(mb);
 	}
@@ -249,10 +264,22 @@ void stop_test_h264_rkmedia_dec()
 	is_start = 0;
 	pthread_join(thread_dec, NULL);
 
+#ifdef VDEC_DISPLAY
+	// 释放解码显示
+	deinit_dec_vo();
+#endif
+
 }
 
 void start_test_h264_rkmedia_dec()
 {
+
+#ifdef VDEC_DISPLAY
+	// 初始化解码显示
+	init_dec_vo(1920, 1080);
+	//init_dec_vo(1280, 720); // 720p vo
+#endif
+
 	is_start = 1;
 	int ret = pthread_create(&thread_dec, NULL, test_h264_dec_proc, NULL);	
 	if(ret!=0 )

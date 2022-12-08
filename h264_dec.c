@@ -44,7 +44,7 @@ int init_dec_vo(int w, int h)
 	//const char *u32PlaneType = "Overlay";
 	int ret;
 	int u32Fps = 60;
-	int u32Zpos = 0;
+	int u32Zpos = 3;
 	VO_CHN_ATTR_S stVoAttr = {0};
 	stVoAttr.pcDevNode = "/dev/dri/card0";
   stVoAttr.u32Width = w;//u32DispWidth;//SCREEN_WIDTH;
@@ -85,7 +85,7 @@ int init_dec_vo(int w, int h)
   ret = RK_MPI_VO_CreateChn(0, &stVoAttr);
   if (ret) {
     printf("Create vo[0] failed! ret=%d\n", ret);
-    return -1;
+	exit(1);
   }
   return 0;
 }
@@ -129,7 +129,7 @@ typedef struct s_h264_dec
 	FILE *fp_h264_out;
 	struct vpu_h264_decode dec;
 	MEDIA_BUFFER_POOL mbp;
-	list_t head;
+	//list_t head;
 }t_h264_dec;
 
 static int _count = 0;
@@ -230,15 +230,6 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 		printf("ERROR:decode!ret=%d\n", ret);
 		exit(1);
 	}
-#if 0
-	if(_mb)
-	{
-		dbg("===========> yk decode h264 mb: ptr=%p, size:%lu\n", 
-				RK_MPI_MB_GetPtr(_mb), RK_MPI_MB_GetSize(_mb));
-		// 写入解码后数据
-		//if(dec->fp_yuv)fwrite(RK_MPI_MB_GetPtr(_mb), RK_MPI_MB_GetSize(_mb), 1, dec->fp_yuv);
-	}
-#endif
 
 	// 解码出数据
 	if(size > 0)
@@ -248,29 +239,45 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 		{
 			_count ++;
 			MEDIA_BUFFER _mb = (MEDIA_BUFFER)mb_array[i];
-			if(mb == NULL)
+			if(_mb == NULL)
 			{
-				dbg("error in get mb null!, will exit\n");
+				dbg("error in get _mb null!, will exit\n");
 				exit(1);
 			}
+		
+#if 0
+			// 分配内存
+			mylist *li;
+			li = (mylist *)malloc(sizeof(mylist));
+			memset(li, 0, sizeof(mylist));
+			mylist->hd = (void*)_mb;
+			list_add_head(&head, &li->list);
+#endif
+
+
+#if 0
+			// 将yuv数据写入文件
+			{
+				dbg("===========> yk decode h264 _mb: ptr=%p, size:%lu\n", 
+						RK_MPI_MB_GetPtr(_mb), RK_MPI_MB_GetSize(_mb));
+				// 写入解码后数据
+				if(dec->fp_yuv)fwrite(RK_MPI_MB_GetPtr(_mb), RK_MPI_MB_GetSize(_mb), 1, dec->fp_yuv);
+			}
+#endif
+
 
 	
 #ifdef VDEC_DISPLAY
+			dbg("-----------------------------------> send vo!\n");
 			// 送显
 			ret = RK_MPI_SYS_SendMediaBuffer(RK_ID_VO, 0, _mb);
 			if(ret != 0)
 			{
-				printf("error to send mb to vo display!, will exit\n");
+				printf("error to send _mb to vo display!, will exit\n");
 				exit(0);
 			}
+
 #endif
-			ret = RK_MPI_MB_ReleaseBuffer(_mb);
-			//ret = RK_MPI_MB_release(_mb);
-			if(ret != 0)
-			{
-				printf("error in release dec buff!\n");
-				exit(1);
-			}
 			static long long pts_old = 0, pts_new = 0;
 			pts_new = RK_MPI_MB_GetTimestamp(_mb);
 			dbg(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> get dec pts:%llu\n", pts_new);
@@ -287,7 +294,43 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 #endif
 			pts_old = pts_new;
 
+
+			// 输出宽高
+#if 1
+			MB_IMAGE_INFO_S stImageInfo = {0};
+			ret = RK_MPI_MB_GetImageInfo(_mb, &stImageInfo);
+			if (ret) 
+			{
+				printf("Get image info failed! ret = %d\n", ret);
+				RK_MPI_MB_ReleaseBuffer(_mb);
+				exit(0);
+			}
+
+			printf("Get Frame:ptr:%p, fd:%d, size:%zu, mode:%d, channel:%d, "
+					"timestamp:%lld, ImgInfo:<wxh %dx%d, fmt 0x%x>\n",
+					RK_MPI_MB_GetPtr(_mb), RK_MPI_MB_GetFD(_mb), RK_MPI_MB_GetSize(_mb),
+					RK_MPI_MB_GetModeID(_mb), RK_MPI_MB_GetChannelID(_mb),
+					RK_MPI_MB_GetTimestamp(_mb), stImageInfo.u32Width,
+					stImageInfo.u32Height, stImageInfo.enImgType);
+#endif
+
+///////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////
+
+			// 释放空间
+			ret = RK_MPI_MB_ReleaseBuffer(_mb);
+			//ret = RK_MPI_MB_release(_mb);
+			if(ret != 0)
+			{
+				printf("error in release dec buff!\n");
+				exit(1);
+			}
+
+			// 进行延时, 此处可以不延时
+			//usleep(1*1000);
+			//usleep(17*1000);
 		}
+
 
 	}
 
@@ -299,8 +342,6 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 	}
 #endif
 
-	// 进行延时
-	usleep(17*1000);
 
 
 	// 释放数据
@@ -320,9 +361,10 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 static pthread_t thread_dec;
 static void *test_h264_dec_proc(void *param)
 {
-	//char *h264 = "./tennis200.h264";
-	char *h264 = "../rk3568_1080p.h264";
+	char *h264 = "./tennis200.h264";
+	//char *h264 = "../rk3568_1080p.h264";
 	//char *h264 = "./1080P.h265";
+	//char *h264 = "../h264_720p.h264"; // 720p 视频
 	
 	FILE* fp_h264_out = fopen("out.h264", "wb+");
 	FILE* fp_yuv = fopen("out.yuv", "wb+");
@@ -330,8 +372,14 @@ static void *test_h264_dec_proc(void *param)
 
 	t_h264_dec dec;
 	memset(&dec, 0, sizeof(t_h264_dec));
+
+#if 1
 	int w=1920;
 	int h = 1080;
+#else
+	int w=1280;
+	int h = 720;
+#endif
 	// 创建解码器
 	ret = vpu_decode_h264_init(&dec.dec, w, h);
 	if(ret != 0)
@@ -364,7 +412,7 @@ static void *test_h264_dec_proc(void *param)
 		exit(1);
 	}
 
-	list_init(&dec.head);
+	//list_init(&dec.head);
 
 	// 读取h264文件
 	long bytes = 0;
@@ -421,15 +469,31 @@ void stop_test_h264_dec()
 
 void start_test_h264_dec()
 {
+	int ret;
 	_dbg_init();
+
+#if 1
+    RK_MPI_SYS_Init();
+    // 创建rkmedia解码器
+    LOG_LEVEL_CONF_S conf = {RK_ID_VDEC, 5, "all"};
+    ret = RK_MPI_LOG_SetLevelConf(&conf);
+    if(ret!=0)
+    {
+        printf("error in set levelconf!\n");
+        exit(1);
+    }
+    printf("===============================> set log level!\n");
+#endif
+
 
 #ifdef VDEC_DISPLAY
 	// 初始化解码显示
 	init_dec_vo(1920, 1080);
+	//init_dec_vo(1280, 720); // 720p vo
 #endif
 
 	is_start = 1;
-	int ret = pthread_create(&thread_dec, NULL, test_h264_dec_proc, NULL);	
+	ret = pthread_create(&thread_dec, NULL, test_h264_dec_proc, NULL);	
 	if(ret!=0 )
 	{
 		printf("error to create thread!\n");

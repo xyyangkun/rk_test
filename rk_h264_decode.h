@@ -3,6 +3,7 @@
  *       Filename:  rk_h264_decode.h
  *
  *    Description:  rk h264 decode 
+ *    1080p解码，720p解码，转换为mb 内存管理
  *
  *        Version:  1.0
  *        Created:  2022年10月09日 17时05分14秒
