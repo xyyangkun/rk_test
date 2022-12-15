@@ -33,6 +33,9 @@
 // 解码后调用显示
 #define VDEC_DISPLAY
 
+// 开启时，进行1080P解码，取消时进行720p解码
+//#define DEC_1080P
+
 static int is_start = 1;
 
 // 发送到vo进行显示
@@ -361,10 +364,13 @@ static int h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 static pthread_t thread_dec;
 static void *test_h264_dec_proc(void *param)
 {
+#ifdef DEC_1080P
 	char *h264 = "./tennis200.h264";
 	//char *h264 = "../rk3568_1080p.h264";
 	//char *h264 = "./1080P.h265";
-	//char *h264 = "../h264_720p.h264"; // 720p 视频
+#else
+	char *h264 = "../h264_720p.h264"; // 720p 视频
+#endif
 	
 	FILE* fp_h264_out = fopen("out.h264", "wb+");
 	FILE* fp_yuv = fopen("out.yuv", "wb+");
@@ -373,7 +379,7 @@ static void *test_h264_dec_proc(void *param)
 	t_h264_dec dec;
 	memset(&dec, 0, sizeof(t_h264_dec));
 
-#if 1
+#ifdef DEC_1080P
 	int w=1920;
 	int h = 1080;
 #else
@@ -488,8 +494,12 @@ void start_test_h264_dec()
 
 #ifdef VDEC_DISPLAY
 	// 初始化解码显示
+#ifdef DEC_1080P
 	init_dec_vo(1920, 1080);
-	//init_dec_vo(1280, 720); // 720p vo
+#else
+	init_dec_vo(1280, 720); // 720p vo
+#endif
+
 #endif
 
 	is_start = 1;
