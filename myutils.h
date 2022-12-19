@@ -37,7 +37,7 @@
 	{ \
 		static struct timeval t_new; \
 		gettimeofday(&t_new, 0); \
-		printf("=====>%s:%d\n",name,120*1000000/((t_new.tv_sec-t_old.tv_sec)*1000000 + (t_new.tv_usec - t_old.tv_usec)));\
+		printf("=====>%s:%ld\n",name,120*1000000/((t_new.tv_sec-t_old.tv_sec)*1000000 + (t_new.tv_usec - t_old.tv_usec)));\
 		t_old = t_new; \
 	} \
 	count++; \

@@ -74,7 +74,7 @@ endif ()
 LINK_DIRECTORIES(${LIBRARY_OUTPUT_PATH})
 
 #include_directories(include include/rkmedia rkmedia/ easymedia include/libdrm include/zlm)
-include_directories(include rkmedia  ${SYSROOT_PATH}/usr/include/easymedia/ include/zlm)
+include_directories( ./ include rkmedia  ${SYSROOT_PATH}/usr/include/easymedia/ include/zlm)
 link_directories(lib lib/zlm lib/mali lib/zlog)
 
 ADD_DEFINITIONS(-DARM)
@@ -134,5 +134,9 @@ target_link_libraries(test_h264_file_decode easymedia rga drm rockchip_mpp avfor
 add_executable(test_easymedia test_easymedia.cpp mb_get.cpp)
 target_link_libraries(test_easymedia easymedia rga drm rockchip_mpp avformat avcodec swresample avutil pthread z asound v4l2 v4lconvert jpeg freetype ${LINK_ASAN} mk_api )
 
+# 
 add_subdirectory(mpp_encode)
+
+#添加分辨率，帧率更新接口
+add_subdirectory(rkmpp_encoder)
 #add_subdirectory(rockit)
