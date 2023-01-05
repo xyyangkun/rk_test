@@ -220,6 +220,7 @@ class MppEncoder {
 
 	int set_resolution(int w, int h, int vw, int vh);
 
+	int requireIFrame();
 
 private:
     //初始化解码信息

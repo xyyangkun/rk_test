@@ -647,7 +647,28 @@ int MppEncoder::set_resolution(int w, int h, int vw, int vh)
 	return 0;
 }
 
+int MppEncoder::requireIFrame()
+{
+	int ret = 0;
+	MppApi *mpi;
+	MppCtx ctx;
+	MppEncCfg cfg = nullptr;	
 
+	mpi = p->mpi;
+	ctx = p->ctx;
+	//cfg = p->cfg;
+
+	MpiCmd mpi_cmd = MPP_ENC_SET_IDR_FRAME;
+	ret = mpi->control(ctx, mpi_cmd, cfg);
+	if (ret)
+	{
+		_log("ERROR in mpp control!\n");
+		printf("ERROR in mpp control!\n");
+		return -2;
+	}
+
+	return 0;
+}
 
 //MPP_RET MppEncoder::encode(const void* mb_in, char* dst, int *length)
 MPP_RET MppEncoder::encode(const void* mb_in, void *mb_out)
