@@ -33,7 +33,13 @@
 
 // rkmpp 编码
 #include "RkMppEncoder.h"
+#ifdef ZLOG
+#include "zlog_api.h"
+zlog_category_t * log_category = NULL;
+#define zlog_path "zlog.conf" 
+#endif
 
+static bool quit = false;
 
 static int is_start = 1;
 static pthread_t thread_dec;
@@ -52,8 +58,8 @@ typedef struct s_h264_rkmedia_dec
 static void h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 {
 	int ret;
-	printf("===============>yk debug!, param=%p==>nalu %lu== %02x %02x %02x %02x\n", param, bytes, nalu[0], nalu[1], nalu[2], nalu[3]);
-	print_fps("==================> send h264=");
+	log_print("===============>yk debug!, param=%p==>nalu %lu== %02x %02x %02x %02x\n", param, bytes, nalu[0], nalu[1], nalu[2], nalu[3]);
+	//print_fps("==================> send h264=");
 	t_h264_rkmedia_dec *dec = (t_h264_rkmedia_dec*)param;
 
 	// 写入解析出来的h264帧
@@ -65,21 +71,23 @@ static void h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 	MEDIA_BUFFER mb_vpu = NULL;
 	mb_vpu = RK_MPI_MB_POOL_GetBuffer(dec->mbp, RK_TRUE);
 	if (!mb_vpu) {
-		printf("ERROR: BufferPool get null buffer...\n");
+		log_error("ERROR: BufferPool get null buffer...\n");
 		exit(1);
 	}
 	memcpy(RK_MPI_MB_GetPtr(mb_vpu), nalu, bytes);
 	RK_MPI_MB_SetSize(mb_vpu, bytes);
-	printf("%s %d size===>%lu\n", __FUNCTION__, __LINE__, RK_MPI_MB_GetSize(mb_vpu));
+	log_print("%s %d size===>%lu\n", __FUNCTION__, __LINE__, RK_MPI_MB_GetSize(mb_vpu));
 
 	ret = RK_MPI_SYS_SendMediaBuffer(RK_ID_VDEC, 0, mb_vpu);
 	if(ret !=0 )
 	{
-		printf("ERROR:decode!ret=%d\n", ret);
+		log_print("ERROR:decode!ret=%d\n", ret);
 		exit(1);
 	}
-	printf("%s %d\n", __FUNCTION__, __LINE__);
-	usleep(5*1000);
+	log_print("%s %d\n", __FUNCTION__, __LINE__);
+	//usleep(5*1000);
+	usleep(10*1000);
+	//usleep(15*1000);
 
 
 	// 写入解码后数据
@@ -102,21 +110,21 @@ static void *GetMediaBuffer(void *arg)
 		{
 			if(is_start != 1)
 			break;
-			printf("RK_MPI_SYS_GetMediaBuffer get null buffer in 5s...\n");
+			log_print("RK_MPI_SYS_GetMediaBuffer get null buffer in 5s...\n");
 			//return NULL;
 			continue; 
 		}
 		MB_IMAGE_INFO_S stImageInfo = {0};                                           
 		ret = RK_MPI_MB_GetImageInfo(mb, &stImageInfo);                              
 		if (ret) {                                                                   
-			printf("Get image info failed! ret = %d\n", ret);                        
+			log_print("Get image info failed! ret = %d\n", ret);                        
 			RK_MPI_MB_ReleaseBuffer(mb);                                             
 			return NULL;                                                             
 		}                                                                            
-	print_fps("==================> recv h264=");
+	print_fps("==================>from h264 file recv h264 =");
 
 #if 1
-		printf("Get Frame:ptr:%p, fd:%d, size:%zu, mode:%d, channel:%d, "            
+		log_print("Get Frame:ptr:%p, fd:%d, size:%zu, mode:%d, channel:%d, "            
 				"timestamp:%lld, ImgInfo:<wxh %dx%d, fmt 0x%x>\n",                   
 				RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetFD(mb), RK_MPI_MB_GetSize(mb), 
 				RK_MPI_MB_GetModeID(mb), RK_MPI_MB_GetChannelID(mb),                 
@@ -130,35 +138,46 @@ static void *GetMediaBuffer(void *arg)
 		}
 		
 		// 进行编码
-		char dst[1024*1024*4];
-		int length = 0;
-        dec->mppenc.encode((void*)mb, dst, &length);
+		//char dst[1024*1024*4];
+		//int length = 0;
+		MEDIA_BUFFER _mb = NULL;
+		_mb = RK_MPI_MB_POOL_GetBuffer(dec->mbp, RK_TRUE);
+		if (!_mb) {
+			log_error("ERROR: BufferPool get null buffer...\n");
+			exit(1);
+		}
+        dec->mppenc.encode((void*)mb, _mb);
 		
 		// 写入编码后额h264数据
 		if(dec->enc_h264)
 		{
-			fwrite(dst, length, 1, dec->enc_h264);
+			// fwrite(RK_MPI_MB_GetPtr(_mb), RK_MPI_MB_GetSize(_mb), 1, dec->enc_h264);
 		}
 		
 
 		RK_MPI_MB_ReleaseBuffer(mb);
+		RK_MPI_MB_ReleaseBuffer(_mb);
 	}
 	return NULL;
 }
 
+tyk_h264_parse parse = {0};
+// rkmedia解码后 mpp在进行编码
 static void *test_h264_dec_proc(void *param)
 {
-	const char *h264 = "./tennis200.h264";
+	const char *h264_1080p = "./tennis200.h264";
 	//char *h264 = "../rk3568_1080p.h264";
 	//char *h264 = "/mnt/sdcard/out_120s.h264";
 	//char *h264 = "./1080P.h265";
+	const char *h264_720p = "../h264_720p.h264";
+	(void)h264_720p;
 	
 	FILE* fp_h264_out = fopen("out.h264", "wb+");
 	FILE* fp_yuv = fopen("out.yuv", "wb+");
 	int ret;
 
 	t_h264_rkmedia_dec dec;
-	memset(&dec, 0, sizeof(t_h264_rkmedia_dec));
+	memset((void*)&dec, 0, sizeof(t_h264_rkmedia_dec));
 	int w=1920;
 	int h = 1080;
 
@@ -171,6 +190,7 @@ static void *test_h264_dec_proc(void *param)
 
 
 	RK_MPI_SYS_Init();	
+#if 0
 	// 创建rkmedia解码器
 	LOG_LEVEL_CONF_S conf = {RK_ID_VDEC, 5, "all"};
 	ret = RK_MPI_LOG_SetLevelConf(&conf);
@@ -179,7 +199,8 @@ static void *test_h264_dec_proc(void *param)
 		printf("error in set levelconf!\n");
 		exit(1);
 	}
-	printf("===============================> set log level!\n");
+	log_print("===============================> set log level!\n");
+#endif
 
 
 	VDEC_CHN_ATTR_S stVdecAttr;
@@ -190,7 +211,7 @@ static void *test_h264_dec_proc(void *param)
 	ret = RK_MPI_VDEC_CreateChn(0, &stVdecAttr);
 	if(ret)
 	{
-		 printf("Create Vdec[0] failed! ret=%d\n", ret);
+		 log_error("Create Vdec[0] failed! ret=%d\n", ret);
 		 exit(1);
 	}
 
@@ -210,7 +231,7 @@ static void *test_h264_dec_proc(void *param)
 	stBufferPoolParam.stImageInfo.u32VerStride = ALIGN16(h);
 	dec.mbp = RK_MPI_MB_POOL_Create(&stBufferPoolParam);
 	if (!dec.mbp) {
-		printf("ERROR in Create usb video buffer pool for vo failed! w:%d h:%d\n", w, h);
+		log_error("ERROR in Create usb video buffer pool for vo failed! w:%d h:%d\n", w, h);
 		exit(1);
 	}
 
@@ -218,23 +239,60 @@ static void *test_h264_dec_proc(void *param)
 	pthread_t read_thread;
 	pthread_create(&read_thread, NULL, GetMediaBuffer, (void*)&dec);
 
-	tyk_h264_parse parse = {0};
+	// 测试720p 1080p 切换编码
+#define CHANGE_720_1080 0
 
 	// 参数
-	strcpy(parse.file_name, h264);
-	parse.mini_buf_size= 1024*1024;
-	parse.is_run = 1;
-	parse.bloop = 0; // 之编码一次
-	//parse.bloop = 1;
-	parse.handler = h264_handler;
-	parse.param = &dec;
-
-
-	ret = yk_h264_parse(&parse);
-	if(ret != 0)
+	while(1)
 	{
-		printf("ERROR in yk parse\n");
-		exit(1);
+		{
+			// 打开1080p文件
+			strcpy(parse.file_name, h264_1080p);
+			parse.mini_buf_size= 1024*1024;
+			parse.is_run = 1;
+#if CHANGE_720_1080==1
+			parse.bloop = 0; // 之编码一次
+#else
+			parse.bloop = 1;
+#endif
+			parse.handler = h264_handler;
+			parse.param = &dec;
+
+
+			ret = yk_h264_parse(&parse);
+			if(ret != 0)
+			{
+				log_error("ERROR in yk parse\n");
+				exit(1);
+			}
+		}
+
+#if CHANGE_720_1080==1
+		// 测试720p 1080p文件切换解码编码
+		{
+			// 打开720p文件
+			strcpy(parse.file_name, h264_720p);
+			parse.mini_buf_size= 1024*1024;
+			parse.is_run = 1;
+			parse.bloop = 0; // 之编码一次
+			//parse.bloop = 1;
+			parse.handler = h264_handler;
+			parse.param = &dec;
+
+
+			ret = yk_h264_parse(&parse);
+			if(ret != 0)
+			{
+				log_error("ERROR in yk parse\n");
+				exit(1);
+			}
+		}
+#else
+	break;
+#endif
+
+
+
 	}
 
 
@@ -242,7 +300,7 @@ static void *test_h264_dec_proc(void *param)
 
 
 
-	printf("will exit thread================================>!!!\n");
+	log_error("will exit thread================================>!!!\n");
 	is_start = 0;
 
 	pthread_join(read_thread, NULL);
@@ -282,25 +340,38 @@ static void start_test_h264_rkmedia_dec()
 	int ret = pthread_create(&thread_dec, NULL, test_h264_dec_proc, NULL);	
 	if(ret!=0 )
 	{
-		printf("error to create thread!\n");
+		log_error("error to create thread!\n");
 		exit(0);
 	}
 }
 
-static bool quit = false;
 static void sigterm_handler(int sig) {
   fprintf(stderr, "signal %d\n", sig);
   quit = true;
+  parse.is_run = 0;
 }
 
 
 int main(int argc, char *argv[])
 {
+#ifdef ZLOG
+	if(zlog_init(zlog_path)) {
+		printf("ERROR in zlog_init\n");
+		zlog_fini();
+		exit(1);
+	}
+	log_category = zlog_get_category("rktest");
+	if(!log_category)
+	{
+		fprintf(stderr, "============================> Error in get comm protcol category\n");
+		zlog_fini();
+	}
+#endif
 	_dbg_init();
 
 	start_test_h264_rkmedia_dec();
 
-	printf("%s initial finish\n", __func__);
+	log_print("%s initial finish\n", __func__);
 	signal(SIGINT, sigterm_handler);
 	while (!quit) {
 		usleep(500000);
@@ -308,6 +379,10 @@ int main(int argc, char *argv[])
 
 	stop_test_h264_rkmedia_dec();
 
+
+#ifdef ZLOG
+	zlog_fini();
+#endif
 	
 	return 0;
 }

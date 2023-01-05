@@ -207,9 +207,17 @@ class MppEncoder {
 	 *      *length 编码后的字节数 length <= imgH * imgW * 3/2
 	 *******************************************************/
 	MPP_RET encode(const void* img, int img_len, char* dst, int *length);
-	MPP_RET encode(const void* mb_in, char* dst, int *length);
+	MPP_RET encode(const void* mb_in, void *mb);
 	void setUp(int width, int height,int fps);
     void MppEncdoerInit(int width, int height, int fps){setUp(width, height, fps); }
+
+	// 设置码率
+	int set_bitrate(int rate);
+	// 设置帧率
+	int set_fps(int fps);
+	// 设置I帧间隔
+	int set_gop(int gop);
+
 
 private:
     //初始化解码信息
@@ -240,7 +248,6 @@ private:
 
 	MPP_RET mpi_enc_gen_osd_data(MppEncOSDData *osd_data, MppBuffer osd_buf,
 															 RK_U32 frame_cnt);
-
  private:
 	MpiEncArgs args_;
 	MpiEncData *p;

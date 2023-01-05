@@ -14,6 +14,19 @@
 #include <stdio.h>
 #include <fstream>
 
+#if RKMPPENCODE_DEBUG == 1
+// 进行zlog
+#include "zlog_api.h"
+extern zlog_category_t * log_category;
+#define _log(fmt,args ...) do {\
+    if(log_category)zlog_debug(log_category, fmt, ##args ); \
+}while(0)
+
+
+#else
+#define _log(fmt,args ...)
+#endif
+
 // 不引用头文件了
 // mpi_enc_utils.h
 // 是现在 libutils.a
@@ -32,63 +45,64 @@ void MppEncoder::init() {
 
 	MppPollType timeout = MPP_POLL_BLOCK;
 
-	printf("mpi_enc_test start\n");
+	_log("mpi_enc_test start\n");
 
 	ret = enc_ctx_init(&p, &args_);
 	if (ret) {
-		printf("test data init failed ret %d\n", ret);
+		_log("test data init failed ret %d\n", ret);
 		deinit();
 	}
 	ret = mpp_buffer_group_get_internal(&p->buf_grp, MPP_BUFFER_TYPE_DRM);
     if (ret) {
-        printf("failed to get mpp buffer group ret %d\n", ret);
+        _log("failed to get mpp buffer group ret %d\n", ret);
         deinit();
     }
 
     ret = mpp_buffer_get(p->buf_grp, &p->frm_buf, p->frame_size + p->header_size);
 	if (ret) {
-		printf("failed to get buffer for input frame ret %d\n", ret);
+		_log("failed to get buffer for input frame ret %d\n", ret);
 		deinit();
 	}
 
     ret = mpp_buffer_get(p->buf_grp, &p->pkt_buf, p->frame_size);
 	if (ret) {
-		printf("failed to get buffer for input osd index ret %d\n", ret);
+		_log("failed to get buffer for input osd index ret %d\n", ret);
 		deinit();
 	}
+	
 
-	printf("mpi_enc_test encoder test start w %d h %d type %d\n", p->width,
+	_log("mpi_enc_test encoder test start w %d h %d type %d\n", p->width,
 				 p->height, p->type);
 
 	// encoder demo
 	ret = mpp_create(&p->ctx, &p->mpi);
 	if (ret) {
-		printf("mpp_create failed ret %d\n", ret);
+		_log("mpp_create failed ret %d\n", ret);
 		deinit();
 	}
 
 	ret = p->mpi->control(p->ctx, MPP_SET_OUTPUT_TIMEOUT, &timeout);
 	if (MPP_OK != ret) {
-		printf("mpi control set output timeout %d ret %d\n", timeout, ret);
+		_log("mpi control set output timeout %d ret %d\n", timeout, ret);
 		deinit();
 	}
 
 	ret = mpp_init(p->ctx, MPP_CTX_ENC, p->type);
 	if (ret) {
-		printf("mpp_init failed ret %d\n", ret);
+		_log("mpp_init failed ret %d\n", ret);
 		deinit();
 	}
 
 	ret = mpp_enc_cfg_init(&p->cfg);
 	if (ret) {
-		printf("mpp_enc_cfg_init failed ret %d\n", ret);
+		_log("mpp_enc_cfg_init failed ret %d\n", ret);
 		deinit();
 	}
 
 
 	ret = test_mpp_enc_cfg_setup(p);
 	if (ret) {
-		printf("test mpp setup failed ret %d\n", ret);
+		_log("test mpp setup failed ret %d\n", ret);
 		deinit();
 	}
 }
@@ -111,6 +125,11 @@ void MppEncoder::deinit() {
 		p->frm_buf = NULL;
 	}
 
+	if (p->pkt_buf) {
+		mpp_buffer_put(p->pkt_buf);
+		p->pkt_buf = NULL;
+	}
+
 	// if (p->osd_idx_buf) {
 	// 	mpp_buffer_put(p->osd_idx_buf);
 	// 	p->osd_idx_buf = NULL;
@@ -123,7 +142,7 @@ MPP_RET MppEncoder::enc_ctx_deinit(MpiEncData **data) {
 	MpiEncData *p = NULL;
 
 	if (!data) {
-		printf("invalid input data %p\n", data);
+		_log("invalid input data %p\n", data);
 		return MPP_ERR_NULL_PTR;
 	}
 
@@ -150,14 +169,14 @@ MPP_RET MppEncoder::enc_ctx_init(MpiEncData **data, MpiEncArgs *cmd) {
 	MPP_RET ret = MPP_OK;
 
 	if (!data || !cmd) {
-		printf("invalid input data %p cmd %p\n", data, cmd);
+		_log("invalid input data %p cmd %p\n", data, cmd);
 		return MPP_ERR_NULL_PTR;
 	}
 
 	//p = mpp_calloc(MpiEncData, 1);
 	p = (MpiEncData *)calloc(sizeof(MpiEncData), 1);
 	if (!p) {
-		printf("create MpiEncTestData failed\n");
+		_log("create MpiEncTestData failed\n");
 		ret = MPP_ERR_MALLOC;
 		*data = p;
 		return ret;
@@ -178,7 +197,7 @@ MPP_RET MppEncoder::enc_ctx_init(MpiEncData **data, MpiEncArgs *cmd) {
     p->rc_mode      = cmd->rc_mode;
     p->num_frames   = cmd->num_frames;
     if (cmd->type == MPP_VIDEO_CodingMJPEG && p->num_frames == 0) {
-        printf("jpege default encode only one frame. Use -n [num] for rc case\n");
+        _log("jpege default encode only one frame. Use -n [num] for rc case\n");
         p->num_frames   = 1;
     }
     p->gop_mode     = cmd->gop_mode;
@@ -243,8 +262,8 @@ MPP_RET MppEncoder::enc_ctx_init(MpiEncData **data, MpiEncArgs *cmd) {
 	return ret;
 }
 
-MPP_RET MppEncoder::mpi_enc_gen_osd_data(MppEncOSDData *osd_data,
-																				 MppBuffer osd_buf, RK_U32 frame_cnt) {
+MPP_RET MppEncoder::mpi_enc_gen_osd_data(MppEncOSDData *osd_data, 
+		MppBuffer osd_buf, RK_U32 frame_cnt) {
 	RK_U32 k = 0;
 	RK_U32 buf_size = 0;
 	RK_U32 buf_offset = 0;
@@ -274,6 +293,7 @@ MPP_RET MppEncoder::mpi_enc_gen_osd_data(MppEncOSDData *osd_data,
 	return MPP_OK;
 }
 
+#if 0
 MPP_RET MppEncoder::WriteHeadInfo(char *dst, int *length) {
 	MPP_RET ret = MPP_OK;
 	MppApi *mpi;
@@ -289,7 +309,7 @@ MPP_RET MppEncoder::WriteHeadInfo(char *dst, int *length) {
 		packet = NULL;
 		ret = mpi->control(ctx, MPP_ENC_GET_EXTRA_INFO, &packet);
 		if (ret) {
-			printf("mpi control enc get extra info failed\n");
+			_log("mpi control enc get extra info failed\n");
 			return ret;
 		}
 		std::cout << "in write head 1" << std::endl;
@@ -335,7 +355,7 @@ MPP_RET MppEncoder::WriteHeadInfo(FILE* fp)
 
         ret = mpi->control(ctx, MPP_ENC_GET_EXTRA_INFO, &m_packet);
         if (ret) {
-            printf("mpi control enc get extra info failed\n");
+            _log("mpi control enc get extra info failed\n");
             return ret;
         }else{
         /* get and write sps/pps for H.264 */
@@ -350,6 +370,7 @@ MPP_RET MppEncoder::WriteHeadInfo(FILE* fp)
     }
     return ret;
 }
+#endif
 
 //override
 // MPP_RET MppEncoder::encode(const cv::Mat& img, char* dst, int *length)
@@ -395,7 +416,7 @@ MPP_RET MppEncoder::WriteHeadInfo(FILE* fp)
 
 //     ret = mpp_frame_init(&frame);
 //     if (ret) {
-//         printf("mpp_frame_init failed\n");
+//         _log("mpp_frame_init failed\n");
 //         return ret;
 //     }
 //     mpp_frame_set_width(frame, p->width);
@@ -421,7 +442,7 @@ MPP_RET MppEncoder::WriteHeadInfo(FILE* fp)
 //      */
 //     ret = mpi->encode_put_frame(ctx, frame);
 //     if (ret) {
-//         printf("mpp encode put frame failed\n");
+//         _log("mpp encode put frame failed\n");
 //         mpp_frame_deinit(&frame);
 //         return ret;
 //     }
@@ -429,7 +450,7 @@ MPP_RET MppEncoder::WriteHeadInfo(FILE* fp)
 //     do {
 //         ret = mpi->encode_get_packet(ctx, &packet);
 //         if (ret) {
-//             printf("mpp encode get packet failed\n");
+//             _log("mpp encode get packet failed\n");
 //             return ret;
 //         }
         
@@ -447,7 +468,7 @@ MPP_RET MppEncoder::WriteHeadInfo(FILE* fp)
 //             /* for low delay partition encoding */
 //             if (mpp_packet_is_partition(packet)) {
 //                 eoi = mpp_packet_is_eoi(packet);
-//                 printf(" pkt %d", p->frm_pkt_cnt);
+//                 _log(" pkt %d", p->frm_pkt_cnt);
 //                 p->frm_pkt_cnt = (eoi) ? (0) : (p->frm_pkt_cnt + 1);
 //             }
             
@@ -457,17 +478,17 @@ MPP_RET MppEncoder::WriteHeadInfo(FILE* fp)
 //                 RK_S32 lt_idx = -1;
 //                 RK_S32 avg_qp = -1;
 //                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_TEMPORAL_ID, &temporal_id))
-//                 	printf(" tid %d", temporal_id);
+//                 	_log(" tid %d", temporal_id);
 //                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_LONG_REF_IDX, &lt_idx))
-//                     printf(" lt %d", lt_idx);
+//                     _log(" lt %d", lt_idx);
 //                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_ENC_AVERAGE_QP, &avg_qp))
-//                     printf(" qp %d", avg_qp);
+//                     _log(" qp %d", avg_qp);
 //             }
 //             mpp_packet_deinit(&packet);
 //             p->stream_size += len;
 //             p->frame_count += eoi;
 //             if (p->pkt_eos) {
-//                 printf("%p found last packet\n", ctx);
+//                 _log("%p found last packet\n", ctx);
 
 //             }
 //         }
@@ -477,9 +498,116 @@ MPP_RET MppEncoder::WriteHeadInfo(FILE* fp)
 
 // 	return ret;
 // }
+//int MppEncoder::set_encparam(int bitrate)
+
+// 设置码率
+int MppEncoder::set_bitrate(int bitrate)
+{
+	int ret = 0;
+	MppEncCfg enc_cfg;
+	RK_S32              bps_target;
+    RK_S32              bps_max;
+    RK_S32              bps_min;
+    RK_S32              rc_mode;
+
+	rc_mode = MPP_ENC_RC_MODE_CBR;
+	bps_min = bitrate;
+	bps_max = bitrate;
+	bps_target = bitrate;
+
+	enc_cfg = p->cfg;
 
 
-MPP_RET MppEncoder::encode(const void* mb_in, char* dst, int *length)
+	ret |= mpp_enc_cfg_set_s32(enc_cfg, "rc:mode", rc_mode);
+	ret |= mpp_enc_cfg_set_s32(enc_cfg, "rc:bps_min", bps_min);
+	ret |= mpp_enc_cfg_set_s32(enc_cfg, "rc:bps_max", bps_max);
+	ret |= mpp_enc_cfg_set_s32(enc_cfg, "rc:bps_target", bps_target);
+	if (ret) 
+	{ 
+		_log("ERROR in mpp_enc_cfg_set_s32!\n");
+		return -1;
+	}
+	// MPP_ENC_SET_CFG
+	MpiCmd mpi_cmd = MPP_ENC_SET_CFG;
+	ret = p->mpi->control(p->ctx, mpi_cmd, (MppParam)enc_cfg);
+	if (ret)
+	{
+		_log("ERROR in mpp control!\n");
+		return -2;
+	}
+
+	return 0;
+}
+
+// 设置帧率
+int MppEncoder::set_fps(int fps)
+{
+	int ret = 0;
+	MppApi *mpi;
+	MppCtx ctx;
+	MppEncCfg cfg;	
+
+	mpi = p->mpi;
+	ctx = p->ctx;
+	cfg = p->cfg;
+
+	p->fps_in_den = 1;
+	p->fps_in_num = fps;
+	p->fps_out_den = 1;
+	p->fps_out_num = fps;
+	p->gop_len = fps;
+
+	ret |= mpp_enc_cfg_set_s32(cfg, "rc:fps_in_num", p->fps_in_num);
+	ret |= mpp_enc_cfg_set_s32(cfg, "rc:fps_in_denorm", p->fps_in_den);
+	ret |= mpp_enc_cfg_set_s32(cfg, "rc:fps_out_num", p->fps_out_num);
+	ret |= mpp_enc_cfg_set_s32(cfg, "rc:fps_out_denorm", p->fps_out_den);
+    ret |= mpp_enc_cfg_set_s32(cfg, "rc:gop", p->gop_len); // gop
+	if (ret) 
+	{ 
+		_log("ERROR in mpp_enc_cfg_set_s32!\n");
+		return -1;
+	}
+
+	// MPP_ENC_SET_CFG
+	MpiCmd mpi_cmd = MPP_ENC_SET_CFG;
+	ret = mpi->control(ctx, mpi_cmd, (MppParam)cfg);
+	if (ret)
+	{
+		_log("ERROR in mpp control!\n");
+		return -2;
+	}
+
+	return 0;
+}
+
+// 设置I帧间隔
+int MppEncoder::set_gop(int gop)
+{
+	int ret = 0;
+	MppApi *mpi;
+	MppCtx ctx;
+	MppEncCfg cfg;	
+
+	mpi = p->mpi;
+	ctx = p->ctx;
+	cfg = p->cfg;
+
+	 ret |= mpp_enc_cfg_set_s32(cfg, "rc:gop", gop);
+	 MpiCmd mpi_cmd = MPP_ENC_SET_CFG;
+	 ret = mpi->control(ctx, mpi_cmd, cfg);
+	if (ret)
+	{
+		_log("ERROR in mpp control!\n");
+		return -2;
+	}
+
+	return 0;
+}
+
+
+
+//MPP_RET MppEncoder::encode(const void* mb_in, char* dst, int *length)
+MPP_RET MppEncoder::encode(const void* mb_in, void *mb_out)
 {
     MPP_RET ret = MPP_OK;
     MppApi *mpi;
@@ -503,30 +631,66 @@ MPP_RET MppEncoder::encode(const void* mb_in, char* dst, int *length)
 	info.fd = fd;
 	info.ptr = in_data;
 	info.size = in_size;
-	// MppBuffer &buffer,
+	// MppBuffer &buffer, MEDIA_BUFFER 转换为MppBuffer
 	ret = mpp_buffer_import(&buffer, &info);
 	if (ret) {
-		printf("import input picture buffer failed\n");
+		_log("import input picture buffer failed\n");
 		exit(1);
 	}
-	
+
+	////////////////////////////////mb out/////////////////////////////////////
+	packet = NULL;
+
+	MEDIA_BUFFER omb = (MEDIA_BUFFER)mb_out;
+#if 0
+	void* out_data;
+	RK_S32 out_size;
+	out_data = RK_MPI_MB_GetPtr(omb);
+	out_size = RK_MPI_MB_GetSize(omb);
+	int out_fd = RK_MPI_MB_GetFD(omb);;
+
+	// 转化成mpp_info
+	MppBuffer out_buffer = nullptr;
+	MppBufferInfo out_info;
+	memset(&out_info, 0, sizeof(out_info));
+	out_info.type = MPP_BUFFER_TYPE_ION;
+	out_info.fd = out_fd;
+	out_info.ptr = out_data;
+	out_info.size = out_size;
+	_log("out_fd=%d ptr:%p size:%d\n", out_fd, out_data, out_size);
+	// MppBuffer &out_buffer, MEDIA_BUFFER 转换为MppBuffer
+	ret = mpp_buffer_import(&out_buffer, &out_info);
+	if (ret != MPP_OK) {
+		_log("import input picture out_buffer failed\n");
+		exit(1);
+	}
+
+    ret = mpp_packet_init_with_buffer(&packet, out_buffer);
+	if (ret != MPP_OK) {
+		_log("init out_buffer failed\n");
+		exit(1);
+	}
+	mpp_buffer_put(out_buffer);
+#endif
+	////////////////////////////////mb out/////////////////////////////////////
 
 
-	char *tmpP = dst;
-	*length = 0;
 
-	printf("!!!%s %d\n", __FUNCTION__, __LINE__);
+
+	//char *tmpP = dst;
+	//*length = 0;
+
+	_log("!!!%s %d\n", __FUNCTION__, __LINE__);
 
 	mpi = p->mpi;
 	ctx = p->ctx;
 
-	packet = NULL;
 	MppMeta meta = NULL;
 	RK_U32 eoi = 1;
 
     ret = mpp_frame_init(&frame);
     if (ret) {
-        printf("mpp_frame_init failed\n");
+        _log("mpp_frame_init failed\n");
         return ret;
     }
     mpp_frame_set_width(frame, p->width);
@@ -536,6 +700,10 @@ MPP_RET MppEncoder::encode(const void* mb_in, char* dst, int *length)
     mpp_frame_set_fmt(frame, p->fmt);
     mpp_frame_set_eos(frame, p->frm_eos);
 
+	// 设置dts pts
+	mpp_frame_set_dts(frame, dts);
+	mpp_frame_set_pts(frame, pts);
+
 #if 0
     mpp_frame_set_buffer(frame, p->frm_buf);
 #else
@@ -544,16 +712,20 @@ MPP_RET MppEncoder::encode(const void* mb_in, char* dst, int *length)
 	//mpp_frame_set_eos(frame, 1);
 	
 	mpp_buffer_put(buffer);
-	
-
 #endif
 
-    meta = mpp_frame_get_meta(frame);
-    mpp_packet_init_with_buffer(&packet, p->pkt_buf);
+	_log("!!!%s %d\n", __FUNCTION__, __LINE__);
+
+    //meta = mpp_frame_get_meta(frame);
+    //mpp_packet_init_with_buffer(&packet, p->pkt_buf);
+	
+	
+
     /* NOTE: It is important to clear output packet length!! */
-    mpp_packet_set_length(packet, 0);
-    mpp_meta_set_packet(meta, KEY_OUTPUT_PACKET, packet);
+    //mpp_packet_set_length(packet, 0);
+    //mpp_meta_set_packet(meta, KEY_OUTPUT_PACKET, packet);
   
+	_log("!!!%s %d\n", __FUNCTION__, __LINE__);
 	/*
      * NOTE: in non-block mode the frame can be resent.
      * The default input timeout mode is block.
@@ -563,16 +735,19 @@ MPP_RET MppEncoder::encode(const void* mb_in, char* dst, int *length)
      */
     ret = mpi->encode_put_frame(ctx, frame);
     if (ret) {
-        printf("mpp encode put frame failed\n");
+        _log("mpp encode put frame failed\n");
         mpp_frame_deinit(&frame);
+			exit(1);
         return ret;
     }
+	_log("!!!%s %d\n", __FUNCTION__, __LINE__);
     mpp_frame_deinit(&frame);
-	printf("!!!%s %d\n", __FUNCTION__, __LINE__);
+	_log("!!!%s %d eoi=%d\n", __FUNCTION__, __LINE__, eoi);
     do {
         ret = mpi->encode_get_packet(ctx, &packet);
         if (ret) {
-            printf("mpp encode get packet failed\n");
+            _log("mpp encode get packet failed\n");
+			exit(1);
             return ret;
         }
         
@@ -582,16 +757,16 @@ MPP_RET MppEncoder::encode(const void* mb_in, char* dst, int *length)
             // write packet to file here
             void *ptr   = mpp_packet_get_pos(packet);
             size_t len  = mpp_packet_get_length(packet);
+			// RK_S64 pts_out = mpp_packet_get_pts(frame);
   
             p->pkt_eos = mpp_packet_get_eos(packet);
-            memcpy(tmpP, ptr, len);
-			*length += len;
             
             /* for low delay partition encoding */
             if (mpp_packet_is_partition(packet)) {
                 eoi = mpp_packet_is_eoi(packet);
-                printf(" pkt %d", p->frm_pkt_cnt);
+                _log(" pkt %d eoi=%d", p->frm_pkt_cnt, eoi);
                 p->frm_pkt_cnt = (eoi) ? (0) : (p->frm_pkt_cnt + 1);
+				exit(1);
             }
             
             if (mpp_packet_has_meta(packet)) {
@@ -600,28 +775,45 @@ MPP_RET MppEncoder::encode(const void* mb_in, char* dst, int *length)
                 RK_S32 lt_idx = -1;
                 RK_S32 avg_qp = -1;
                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_TEMPORAL_ID, &temporal_id))
-                	printf(" tid %d", temporal_id);
+                	_log(" tid %d", temporal_id);
                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_LONG_REF_IDX, &lt_idx))
-                    printf(" lt %d", lt_idx);
+                    _log(" lt %d", lt_idx);
                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_ENC_AVERAGE_QP, &avg_qp))
-                    printf(" qp %d", avg_qp);
+                    _log(" qp %d", avg_qp);
             }
-            mpp_packet_deinit(&packet);
             p->stream_size += len;
             p->frame_count += eoi;
             if (p->pkt_eos) {
-                printf("%p found last packet\n", ctx);
+                _log("%p found last packet\n", ctx);
 
             }
+
+			// 设置mb 属性
+			//output->SetValidSize(packet_len);
+			//output->SetUSTimeStamp(pts);
+			//output->SetEOF(out_eof);
+			// 编码后的数据仅仅需要数据长度，是否是I真可以从数据中判断
+#if 1
+			_log("\n\n==========================> packet size:%ld, ptr:%p %p\n",
+					len, ptr, RK_MPI_MB_GetPtr(omb));
+			memcpy(RK_MPI_MB_GetPtr(omb),  ptr, len);
+			RK_MPI_MB_SetSize(omb, len);
+			//RK_MPI_MB_SetTimestamp(omb, pts_out);
+#endif
+
+			// 最后释放packet
+            mpp_packet_deinit(&packet);
+
         }
     } while (!eoi);
-	printf("!!!%s %d\n", __FUNCTION__, __LINE__);
+	_log("!!!%s %d\n", __FUNCTION__, __LINE__);
 
     
 
 	return ret;
 }
 
+#if 0
 MPP_RET MppEncoder::encode(const void* img, int img_len, char* dst, int *length)
 {
     MPP_RET ret = MPP_OK;
@@ -634,7 +826,7 @@ MPP_RET MppEncoder::encode(const void* img, int img_len, char* dst, int *length)
 	// mpp默认设置为IPPPPP帧的模式， p->gop 为60帧
 	//即每隔60帧写一次头信息
 	//std::cout << " p->gop is:" << p->gop << std::endl;
-	printf("!!!%s %d\n", __FUNCTION__, __LINE__);
+	_log("!!!%s %d\n", __FUNCTION__, __LINE__);
 #if 0
 	if (0 == (countIdx_ % 60)) {
 		countIdx_ = 0;
@@ -647,9 +839,9 @@ MPP_RET MppEncoder::encode(const void* img, int img_len, char* dst, int *length)
 	}
 
 #endif
-	printf("!!!%s %d\n", __FUNCTION__, __LINE__);
+	_log("!!!%s %d\n", __FUNCTION__, __LINE__);
 	if (NULL == p) return MPP_ERR_NULL_PTR;
-	printf("!!!%s %d\n", __FUNCTION__, __LINE__);
+	_log("!!!%s %d\n", __FUNCTION__, __LINE__);
 
 	mpi = p->mpi;
 	ctx = p->ctx;
@@ -663,7 +855,7 @@ MPP_RET MppEncoder::encode(const void* img, int img_len, char* dst, int *length)
 	memcpy(buf, img, img_len);
     ret = mpp_frame_init(&frame);
     if (ret) {
-        printf("mpp_frame_init failed\n");
+        _log("mpp_frame_init failed\n");
         return ret;
     }
     mpp_frame_set_width(frame, p->width);
@@ -689,16 +881,16 @@ MPP_RET MppEncoder::encode(const void* img, int img_len, char* dst, int *length)
      */
     ret = mpi->encode_put_frame(ctx, frame);
     if (ret) {
-        printf("mpp encode put frame failed\n");
+        _log("mpp encode put frame failed\n");
         mpp_frame_deinit(&frame);
         return ret;
     }
     mpp_frame_deinit(&frame);
-	printf("!!!%s %d\n", __FUNCTION__, __LINE__);
+	_log("!!!%s %d\n", __FUNCTION__, __LINE__);
     do {
         ret = mpi->encode_get_packet(ctx, &packet);
         if (ret) {
-            printf("mpp encode get packet failed\n");
+            _log("mpp encode get packet failed\n");
             return ret;
         }
         
@@ -716,7 +908,7 @@ MPP_RET MppEncoder::encode(const void* img, int img_len, char* dst, int *length)
             /* for low delay partition encoding */
             if (mpp_packet_is_partition(packet)) {
                 eoi = mpp_packet_is_eoi(packet);
-                printf(" pkt %d", p->frm_pkt_cnt);
+                _log(" pkt %d", p->frm_pkt_cnt);
                 p->frm_pkt_cnt = (eoi) ? (0) : (p->frm_pkt_cnt + 1);
             }
             
@@ -726,27 +918,28 @@ MPP_RET MppEncoder::encode(const void* img, int img_len, char* dst, int *length)
                 RK_S32 lt_idx = -1;
                 RK_S32 avg_qp = -1;
                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_TEMPORAL_ID, &temporal_id))
-                	printf(" tid %d", temporal_id);
+                	_log(" tid %d", temporal_id);
                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_LONG_REF_IDX, &lt_idx))
-                    printf(" lt %d", lt_idx);
+                    _log(" lt %d", lt_idx);
                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_ENC_AVERAGE_QP, &avg_qp))
-                    printf(" qp %d", avg_qp);
+                    _log(" qp %d", avg_qp);
             }
             mpp_packet_deinit(&packet);
             p->stream_size += len;
             p->frame_count += eoi;
             if (p->pkt_eos) {
-                printf("%p found last packet\n", ctx);
+                _log("%p found last packet\n", ctx);
 
             }
         }
     } while (!eoi);
-	printf("!!!%s %d\n", __FUNCTION__, __LINE__);
+	_log("!!!%s %d\n", __FUNCTION__, __LINE__);
 
     
 
 	return ret;
 }
+#endif
 
 
 
@@ -920,7 +1113,7 @@ MPP_RET MppEncoder::test_mpp_setup_legacy(MpiEncData *p) {
 	prep_cfg->rotation = MPP_ENC_ROT_0;
 	ret = mpi->control(ctx, MPP_ENC_SET_PREP_CFG, prep_cfg);
 	if (ret) {
-		printf("mpi control enc set prep cfg failed ret %d\n", ret);
+		_log("mpi control enc set prep cfg failed ret %d\n", ret);
 		return ret;
 	}
 
@@ -956,11 +1149,11 @@ MPP_RET MppEncoder::test_mpp_setup_legacy(MpiEncData *p) {
 	rc_cfg->gop = p->gop_len;
 	rc_cfg->max_reenc_times = 1;
 
-	printf("mpi_enc_test bps %d fps %d gop %d\n", rc_cfg->bps_target,
+	_log("mpi_enc_test bps %d fps %d gop %d\n", rc_cfg->bps_target,
 				 rc_cfg->fps_out_num, rc_cfg->gop);
 	ret = mpi->control(ctx, MPP_ENC_SET_RC_CFG, rc_cfg);
 	if (ret) {
-		printf("mpi control enc set rc cfg failed ret %d\n", ret);
+		_log("mpi control enc set rc cfg failed ret %d\n", ret);
 		return ret;
 	}
 
@@ -1015,13 +1208,13 @@ MPP_RET MppEncoder::test_mpp_setup_legacy(MpiEncData *p) {
 			}
 		} break;
 		default: {
-			printf("support encoder coding type %d\n", codec_cfg->coding);
+			_log("support encoder coding type %d\n", codec_cfg->coding);
 		} break;
 	}
 
 	ret = mpi->control(ctx, MPP_ENC_SET_CODEC_CFG, codec_cfg);
 	if (ret) {
-		printf("mpi control enc set codec cfg failed ret %d\n", ret);
+		_log("mpi control enc set codec cfg failed ret %d\n", ret);
 		return ret;
 	}
 
@@ -1038,11 +1231,11 @@ MPP_RET MppEncoder::test_mpp_setup_legacy(MpiEncData *p) {
 		split_cfg->split_mode = p->split_mode;
 		split_cfg->split_arg = p->split_arg;
 
-		printf("split_mode %d split_arg %d\n", p->split_mode, p->split_arg);
+		_log("split_mode %d split_arg %d\n", p->split_mode, p->split_arg);
 
 		ret = mpi->control(ctx, MPP_ENC_SET_SPLIT, split_cfg);
 		if (ret) {
-			printf("mpi control enc set codec cfg failed ret %d\n", ret);
+			_log("mpi control enc set codec cfg failed ret %d\n", ret);
 			return ret;
 		}
 	}
@@ -1051,7 +1244,7 @@ MPP_RET MppEncoder::test_mpp_setup_legacy(MpiEncData *p) {
 	p->sei_mode = MPP_ENC_SEI_MODE_ONE_FRAME;
 	ret = mpi->control(ctx, MPP_ENC_SET_SEI_CFG, &p->sei_mode);
 	if (ret) {
-		printf("mpi control enc set sei cfg failed ret %d\n", ret);
+		_log("mpi control enc set sei cfg failed ret %d\n", ret);
 		return ret;
 	}
 
@@ -1059,7 +1252,7 @@ MPP_RET MppEncoder::test_mpp_setup_legacy(MpiEncData *p) {
 		p->header_mode = MPP_ENC_HEADER_MODE_EACH_IDR;
 		ret = mpi->control(ctx, MPP_ENC_SET_HEADER_MODE, &p->header_mode);
 		if (ret) {
-			printf("mpi control enc set header mode failed ret %d\n", ret);
+			_log("mpi control enc set header mode failed ret %d\n", ret);
 			return ret;
 		}
 	}
@@ -1074,7 +1267,7 @@ MPP_RET MppEncoder::test_mpp_setup_legacy(MpiEncData *p) {
 		// mpi_enc_gen_ref_cfg(ref);
 		ret = mpi->control(ctx, MPP_ENC_SET_REF_CFG, ref);
 		if (ret) {
-			printf("mpi control enc set ref cfg failed ret %d\n", ret);
+			_log("mpi control enc set ref cfg failed ret %d\n", ret);
 			return ret;
 		}
 		mpp_enc_ref_cfg_deinit(&ref);
@@ -1132,25 +1325,25 @@ MPP_RET MppEncoder::test_mpp_enc_cfg_setup(MpiEncData *p) {
     mpp_enc_cfg_set_s32(cfg, "rc:bps_target", p->bps);
     switch (p->rc_mode) {
     case MPP_ENC_RC_MODE_FIXQP : {
-        printf("FIXQp\n");
+        _log("FIXQp\n");
         /* do not setup bitrate on FIXQP mode */
     } break;
     case MPP_ENC_RC_MODE_CBR : {
-        printf("CBR\n");
+        _log("CBR\n");
         /* CBR mode has narrow bound */
         mpp_enc_cfg_set_s32(cfg, "rc:bps_max", p->bps_max ? p->bps_max : p->bps * 17 / 16);
         mpp_enc_cfg_set_s32(cfg, "rc:bps_min", p->bps_min ? p->bps_min : p->bps * 15 / 16);
     } break;
     case MPP_ENC_RC_MODE_VBR :
     case MPP_ENC_RC_MODE_AVBR : {
-        printf("AVBR \n");
+        _log("AVBR \n");
         /* VBR mode has wide bound */
         mpp_enc_cfg_set_s32(cfg, "rc:bps_max", p->bps_max ? p->bps_max : p->bps * 17 / 16);
         mpp_enc_cfg_set_s32(cfg, "rc:bps_min", p->bps_min ? p->bps_min : p->bps * 1 / 16);
     } break;
     default : {
         /* default use CBR mode */
-        printf("default");
+        _log("default");
         mpp_enc_cfg_set_s32(cfg, "rc:bps_max", p->bps_max ? p->bps_max : p->bps * 17 / 16);
         mpp_enc_cfg_set_s32(cfg, "rc:bps_min", p->bps_min ? p->bps_min : p->bps * 15 / 16);
     } break;
@@ -1180,7 +1373,7 @@ MPP_RET MppEncoder::test_mpp_enc_cfg_setup(MpiEncData *p) {
             mpp_enc_cfg_set_s32(cfg, "rc:qp_ip", 2);
         } break;
         default : {
-            printf("unsupport encoder rc mode %d\n", p->rc_mode);
+            _log("unsupport encoder rc mode %d\n", p->rc_mode);
         } break;
         }
     } break;
@@ -1232,7 +1425,7 @@ MPP_RET MppEncoder::test_mpp_enc_cfg_setup(MpiEncData *p) {
     case MPP_VIDEO_CodingVP8 : {
     } break;
     default : {
-        printf("unsupport encoder coding type %d\n", p->type);
+        _log("unsupport encoder coding type %d\n", p->type);
     } break;
     }
 
@@ -1243,14 +1436,14 @@ MPP_RET MppEncoder::test_mpp_enc_cfg_setup(MpiEncData *p) {
     //mpp_env_get_u32("split_arg", &p->split_arg, 0);
 
     if (p->split_mode) {
-        printf("%p split_mode %d split_arg %d\n", ctx, p->split_mode, p->split_arg);
+        _log("%p split_mode %d split_arg %d\n", ctx, p->split_mode, p->split_arg);
         mpp_enc_cfg_set_s32(cfg, "split:mode", p->split_mode);
         mpp_enc_cfg_set_s32(cfg, "split:arg", p->split_arg);
     }
 
     ret = mpi->control(ctx, MPP_ENC_SET_CFG, cfg);
     if (ret) {
-        printf("mpi control enc set cfg failed ret %d\n", ret);
+        _log("mpi control enc set cfg failed ret %d\n", ret);
         return ret;
     }
 
@@ -1258,7 +1451,7 @@ MPP_RET MppEncoder::test_mpp_enc_cfg_setup(MpiEncData *p) {
     p->sei_mode = MPP_ENC_SEI_MODE_ONE_FRAME;
     ret = mpi->control(ctx, MPP_ENC_SET_SEI_CFG, &p->sei_mode);
     if (ret) {
-        printf("mpi control enc set sei cfg failed ret %d\n", ret);
+        _log("mpi control enc set sei cfg failed ret %d\n", ret);
         return ret;
     }
 
@@ -1266,7 +1459,7 @@ MPP_RET MppEncoder::test_mpp_enc_cfg_setup(MpiEncData *p) {
         p->header_mode = MPP_ENC_HEADER_MODE_EACH_IDR;
         ret = mpi->control(ctx, MPP_ENC_SET_HEADER_MODE, &p->header_mode);
         if (ret) {
-            printf("mpi control enc set header mode failed ret %d\n", ret);
+            _log("mpi control enc set header mode failed ret %d\n", ret);
             return ret;
         }
     }
@@ -1286,7 +1479,7 @@ MPP_RET MppEncoder::test_mpp_enc_cfg_setup(MpiEncData *p) {
 
         ret = mpi->control(ctx, MPP_ENC_SET_REF_CFG, ref);
         if (ret) {
-            printf("mpi control enc set ref cfg failed ret %d\n", ret);
+            _log("mpi control enc set ref cfg failed ret %d\n", ret);
             return ret;
         }
         mpp_enc_ref_cfg_deinit(&ref);
@@ -1325,11 +1518,11 @@ void MppEncoder::setUp(int width, int height, int fps) {
     args_.fps_out_num = fps;
 	args_.width = width;
 	args_.height = height;
-	args_.hor_stride = mpi_enc_width_default_stride(args_.width, args_.format);
-	args_.ver_stride = args_.height;
+	args_.hor_stride = MPP_ALIGN(width, 16);//mpi_enc_width_default_stride(args_.width, args_.format);
+	args_.ver_stride = MPP_ALIGN(height, 16);//args_.height;
 	
 	packet = NULL;
-	std::cout<<"in setUp"<<std::endl;
+	_log("in setUp");
 
 	init();
 }

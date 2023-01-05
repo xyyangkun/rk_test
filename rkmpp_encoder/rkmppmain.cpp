@@ -72,7 +72,7 @@ int main(int argc, char* argv[]){
         std::cout<<count++<<std::endl;
 		printf("file size=%d\n", file.size());
         //mppenc.encode(file.data(), file.size(), pdst, &length);
-        mppenc.encode(file.data(), 3110400, pdst, &length);
+        //mppenc.encode(file.data(), 3110400, pdst, &length);
         // mppenc.encode(img, 345600, pdst, &length);
         fwrite(dst, length,1,  fp);
     }

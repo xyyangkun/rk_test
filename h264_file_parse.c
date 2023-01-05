@@ -37,6 +37,21 @@ extern "C"{
 
 #include "h264_file_parse.h"
 
+#if YKH264_PARSE_DEBUG == 1
+// 进行zlog
+#include "zlog_api.h"
+extern zlog_category_t * log_category;
+#define _log(fmt,args ...) do {\
+    if(log_category)zlog_debug(log_category, fmt, ##args ); \
+}while(0)
+
+
+#else
+#define _log(fmt,args ...)
+#endif
+
+
+
 int yk_h264_parse(tyk_h264_parse *parse)
 {
     FILE *fp =NULL;
@@ -54,7 +69,7 @@ int yk_h264_parse(tyk_h264_parse *parse)
         fp = fopen(parse->file_name, "rb");
         if(fp == NULL)
         {
-            printf("can't open file %s \n", parse->file_name);
+            _log("can't open file %s \n", parse->file_name);
 			return -1;
         }
     }
@@ -65,13 +80,13 @@ int yk_h264_parse(tyk_h264_parse *parse)
 	file_size = ftell(fp);
 	
 
-    printf("yk_h264_parse stream file:%s, bufsize: %d\n", 
+    _log("yk_h264_parse stream file:%s, bufsize: %d\n", 
     parse->file_name, parse->mini_buf_size);
 
     pbuf = malloc(parse->mini_buf_size);
     if(pbuf == NULL)
     {
-        printf("error can't alloc %d\n", parse->mini_buf_size);
+        _log("error can't alloc %d\n", parse->mini_buf_size);
         fclose(fp);
         return -1;
     }     
@@ -100,7 +115,7 @@ int yk_h264_parse(tyk_h264_parse *parse)
                 }
                 else
                 {
-					printf("yk debug read all file will break;!\n");
+					_log("yk debug read all file will break;!\n");
                     break;
                 }
             }
@@ -117,7 +132,7 @@ int yk_h264_parse(tyk_h264_parse *parse)
                 {
                     bFindStart = true;
                     i += 8;
-					printf("++++++++++++++++++++++++ found start!, i=%d\n", i);
+					_log("++++++++++++++++++++++++ found start!, i=%d\n", i);
                     break;
                 }
             }
@@ -134,7 +149,7 @@ int yk_h264_parse(tyk_h264_parse *parse)
                    )                   
                 {					
                     bFindEnd = true;
-					printf("++++++++++++++++++++++++ found end! i=%d\n", i);
+					_log("++++++++++++++++++++++++ found end! i=%d\n", i);
                     break;
                 }
             }
@@ -142,10 +157,10 @@ int yk_h264_parse(tyk_h264_parse *parse)
             if(i > 0) s32ReadLen = i;
             if (bFindStart == false)
             {
-                printf("error can not find start code!s32ReadLen %d, s32UsedBytes %d. \n", 
+                _log("error can not find start code!s32ReadLen %d, s32UsedBytes %d. \n", 
 					           s32ReadLen, s32UsedBytes);
 				// yk debug add, 没有找到头或者尾部，应该退出
-				printf("error h264 not find head!, will exit\n");
+				_log("error h264 not find head!, will exit\n");
 				exit(1);
             }
 
@@ -154,9 +169,9 @@ int yk_h264_parse(tyk_h264_parse *parse)
             {
                 s32ReadLen = i+8;
 				// yk debug add, 没有找到头或者尾部, 应该是到文件尾部了
-				printf("\error h264 not find tail!, will exit, s32ReadLen=%d ,file_size=%d\n", s32ReadLen, file_size);
+				_log("error h264 not find tail!, will exit, s32ReadLen=%d ,file_size=%lu\n", s32ReadLen, file_size);
 				uint32_t i = start + s32ReadLen - 4;
-				printf("%02x %02x %02x %02x    %02x %02x %02x %02x\n",
+				_log("%02x %02x %02x %02x    %02x %02x %02x %02x\n",
 						pbuf[i+0], pbuf[i+1], pbuf[i+2], pbuf[i+3],
 						pbuf[i+4], pbuf[i+5], pbuf[i+6], pbuf[i+7]);
 
@@ -175,7 +190,7 @@ int yk_h264_parse(tyk_h264_parse *parse)
 				biggst_size = s32ReadLen;
 	   }
         
-        printf("parse One Frame,read byte=%d start=%d, readlen=%d\n",
+        _log("parse One Frame,read byte=%d start=%d, readlen=%d\n",
 				s32UsedBytes, start, s32ReadLen);
         fflush(stdout);   
         
@@ -185,8 +200,8 @@ int yk_h264_parse(tyk_h264_parse *parse)
     }
 
     
-    //printf("SAMPLE_TEST:send steam thread %d return ...\n", pstVdecThreadParam->s32ChnId);
-	printf("found biggest_size= %u\n", biggst_size);
+    //_log("SAMPLE_TEST:send steam thread %d return ...\n", pstVdecThreadParam->s32ChnId);
+	_log("found biggest_size= %u\n", biggst_size);
     fflush(stdout);
     if (pbuf != NULL)
     {
