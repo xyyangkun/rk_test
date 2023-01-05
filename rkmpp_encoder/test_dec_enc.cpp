@@ -51,6 +51,7 @@ typedef struct s_h264_rkmedia_dec
 	MEDIA_BUFFER_POOL mbp;
 
     osee::MppEncoder mppenc;
+	unsigned int w, h;
 	FILE *enc_h264;
 }t_h264_rkmedia_dec;
 
@@ -86,8 +87,9 @@ static void h264_handler(void* param, const uint8_t* nalu, size_t bytes)
 	}
 	log_print("%s %d\n", __FUNCTION__, __LINE__);
 	//usleep(5*1000);
-	usleep(10*1000);
-	//usleep(15*1000);
+	//usleep(10*1000);
+	usleep(15*1000);
+	//usleep(35*1000);
 
 
 	// 写入解码后数据
@@ -136,6 +138,15 @@ static void *GetMediaBuffer(void *arg)
 		{
 			//fwrite(RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetSize(mb), 1, dec->fp_yuv);
 		}
+
+		if(stImageInfo.u32Width != dec->w || stImageInfo.u32Height != dec->h)
+		{
+			dec->w = stImageInfo.u32Width;
+			dec->h = stImageInfo.u32Height;
+			printf("===========> resolution change : %d %d\n", dec->w, dec->h);
+
+			dec->mppenc.set_resolution(dec->w, dec->h, ALIGN16(dec->w), ALIGN16(dec->h));
+		}
 		
 		// 进行编码
 		//char dst[1024*1024*4];
@@ -151,7 +162,7 @@ static void *GetMediaBuffer(void *arg)
 		// 写入编码后额h264数据
 		if(dec->enc_h264)
 		{
-			// fwrite(RK_MPI_MB_GetPtr(_mb), RK_MPI_MB_GetSize(_mb), 1, dec->enc_h264);
+			fwrite(RK_MPI_MB_GetPtr(_mb), RK_MPI_MB_GetSize(_mb), 1, dec->enc_h264);
 		}
 		
 
@@ -161,6 +172,8 @@ static void *GetMediaBuffer(void *arg)
 	return NULL;
 }
 
+t_h264_rkmedia_dec dec;
+
 tyk_h264_parse parse = {0};
 // rkmedia解码后 mpp在进行编码
 static void *test_h264_dec_proc(void *param)
@@ -169,14 +182,14 @@ static void *test_h264_dec_proc(void *param)
 	//char *h264 = "../rk3568_1080p.h264";
 	//char *h264 = "/mnt/sdcard/out_120s.h264";
 	//char *h264 = "./1080P.h265";
-	const char *h264_720p = "../h264_720p.h264";
+	//const char *h264_720p = "../rk3568_720p.h264";
+	const char *h264_720p = "../test_720p.h264";
 	(void)h264_720p;
 	
 	FILE* fp_h264_out = fopen("out.h264", "wb+");
 	FILE* fp_yuv = fopen("out.yuv", "wb+");
 	int ret;
 
-	t_h264_rkmedia_dec dec;
 	memset((void*)&dec, 0, sizeof(t_h264_rkmedia_dec));
 	int w=1920;
 	int h = 1080;
@@ -187,6 +200,7 @@ static void *test_h264_dec_proc(void *param)
 	// init venc
 	dec.mppenc.MppEncdoerInit(1920, 1080, 60);
 	dec.enc_h264 = fopen("enc.h264", "wb+");
+
 
 
 	RK_MPI_SYS_Init();	
@@ -240,16 +254,21 @@ static void *test_h264_dec_proc(void *param)
 	pthread_create(&read_thread, NULL, GetMediaBuffer, (void*)&dec);
 
 	// 测试720p 1080p 切换编码
-#define CHANGE_720_1080 0
+#define CHANGE_720_1080 1
+
+
+	parse.is_run = 1;
+	dec.w = 1920;
+	dec.h = 1080;
 
 	// 参数
 	while(1)
 	{
+		if(parse.is_run == 0)break;
 		{
 			// 打开1080p文件
 			strcpy(parse.file_name, h264_1080p);
 			parse.mini_buf_size= 1024*1024;
-			parse.is_run = 1;
 #if CHANGE_720_1080==1
 			parse.bloop = 0; // 之编码一次
 #else
@@ -267,13 +286,18 @@ static void *test_h264_dec_proc(void *param)
 			}
 		}
 
+		if(parse.is_run == 0)break;
+
 #if CHANGE_720_1080==1
 		// 测试720p 1080p文件切换解码编码
 		{
+			// 解码时改变
+			//dec.w = 1280;
+			//dec.h = 720;
 			// 打开720p文件
 			strcpy(parse.file_name, h264_720p);
 			parse.mini_buf_size= 1024*1024;
-			parse.is_run = 1;
+			//parse.is_run = 1;
 			parse.bloop = 0; // 之编码一次
 			//parse.bloop = 1;
 			parse.handler = h264_handler;
@@ -287,6 +311,7 @@ static void *test_h264_dec_proc(void *param)
 				exit(1);
 			}
 		}
+		if(parse.is_run == 0)break;
 #else
 	break;
 #endif
@@ -351,6 +376,16 @@ static void sigterm_handler(int sig) {
   parse.is_run = 0;
 }
 
+void useage()
+{
+	printf("q exit\n");
+	printf("1 change gop/fps to 30\n");
+	printf("2 change gop/fps to 60\n");
+	printf("3 change birtat 80m\n");
+	printf("4 change birtat 10m\n");
+
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -373,9 +408,65 @@ int main(int argc, char *argv[])
 
 	log_print("%s initial finish\n", __func__);
 	signal(SIGINT, sigterm_handler);
+
+#if 1
+	// 菜单
+	while(1)
+	{
+		int ret;
+		char ch;
+		useage();
+		scanf("%c", &ch);
+		getchar();
+		printf("you input, ch=%c\n", ch);
+		switch(ch)
+		{
+			case 'q':
+				goto exit;
+			break;
+
+			case '1':
+				ret = dec.mppenc.set_fps(30);	
+				if(ret != 0){printf("%d", __LINE__); exit(1);}
+				ret = dec.mppenc.set_gop(30);	
+				if(ret != 0){printf("%d", __LINE__); exit(1);}
+			break;
+
+			case '2':
+				ret=dec.mppenc.set_fps(60);	
+				if(ret != 0){printf("%d", __LINE__); exit(1);}
+				ret=dec.mppenc.set_gop(60);	
+				if(ret != 0){printf("%d", __LINE__); exit(1);}
+			break;
+
+			case '3':
+				ret=dec.mppenc.set_bitrate(80000000);	
+				if(ret != 0){printf("%d", __LINE__); exit(1);}
+				
+			break;
+
+			case '4':
+				ret=dec.mppenc.set_bitrate(10000000);	
+				if(ret != 0){printf("%d", __LINE__); exit(1);}
+			break;
+
+			default:
+			goto exit;
+			break;
+		}
+
+	}
+#endif
+
 	while (!quit) {
 		usleep(500000);
 	}
+exit:
+	quit = true;
+	parse.is_run = 0;
+
+	log_print("will exit thread!");
+	printf("will exit thread!");
 
 	stop_test_h264_rkmedia_dec();
 

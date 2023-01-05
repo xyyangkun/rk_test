@@ -218,6 +218,8 @@ class MppEncoder {
 	// 设置I帧间隔
 	int set_gop(int gop);
 
+	int set_resolution(int w, int h, int vw, int vh);
+
 
 private:
     //初始化解码信息

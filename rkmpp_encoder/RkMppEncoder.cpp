@@ -542,6 +542,7 @@ int MppEncoder::set_bitrate(int bitrate)
 // 设置帧率
 int MppEncoder::set_fps(int fps)
 {
+	printf("send fps %d\n", fps);
 	int ret = 0;
 	MppApi *mpi;
 	MppCtx ctx;
@@ -565,6 +566,7 @@ int MppEncoder::set_fps(int fps)
 	if (ret) 
 	{ 
 		_log("ERROR in mpp_enc_cfg_set_s32!\n");
+		printf("ERROR in mpp_enc_cfg_set_s32!\n");
 		return -1;
 	}
 
@@ -574,8 +576,10 @@ int MppEncoder::set_fps(int fps)
 	if (ret)
 	{
 		_log("ERROR in mpp control!\n");
+		printf("ERROR in mpp control!\n");
 		return -2;
 	}
+	printf("send fps %d\n", fps);
 
 	return 0;
 }
@@ -592,12 +596,51 @@ int MppEncoder::set_gop(int gop)
 	ctx = p->ctx;
 	cfg = p->cfg;
 
-	 ret |= mpp_enc_cfg_set_s32(cfg, "rc:gop", gop);
-	 MpiCmd mpi_cmd = MPP_ENC_SET_CFG;
-	 ret = mpi->control(ctx, mpi_cmd, cfg);
+	ret |= mpp_enc_cfg_set_s32(cfg, "rc:gop", gop);
 	if (ret)
 	{
 		_log("ERROR in mpp control!\n");
+		return -2;
+	}
+	MpiCmd mpi_cmd = MPP_ENC_SET_CFG;
+	ret = mpi->control(ctx, mpi_cmd, cfg);
+	if (ret)
+	{
+		_log("ERROR in mpp control!\n");
+		printf("ERROR in mpp control!\n");
+		return -2;
+	}
+
+	return 0;
+}
+
+int MppEncoder::set_resolution(int w, int h, int vw, int vh)
+{
+	int ret = 0;
+	MppApi *mpi;
+	MppCtx ctx;
+	MppEncCfg cfg;	
+
+	mpi = p->mpi;
+	ctx = p->ctx;
+	cfg = p->cfg;
+
+	ret |= mpp_enc_cfg_set_s32(cfg, "prep:width", w);
+	ret |= mpp_enc_cfg_set_s32(cfg, "prep:height", h);
+	ret |= mpp_enc_cfg_set_s32(cfg, "prep:hor_stride", vw);
+	ret |= mpp_enc_cfg_set_s32(cfg, "prep:ver_stride", vh);
+	if (ret)
+	{
+		_log("ERROR in mpp control!\n");
+		printf("ERROR in mpp control!\n");
+		return -2;
+	}
+	MpiCmd mpi_cmd = MPP_ENC_SET_CFG;
+	ret = mpi->control(ctx, mpi_cmd, cfg);
+	if (ret)
+	{
+		_log("ERROR in mpp control!\n");
+		printf("ERROR in mpp control!\n");
 		return -2;
 	}
 
