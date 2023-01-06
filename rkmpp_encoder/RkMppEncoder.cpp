@@ -293,213 +293,6 @@ MPP_RET MppEncoder::mpi_enc_gen_osd_data(MppEncOSDData *osd_data,
 	return MPP_OK;
 }
 
-#if 0
-MPP_RET MppEncoder::WriteHeadInfo(char *dst, int *length) {
-	MPP_RET ret = MPP_OK;
-	MppApi *mpi;
-	MppCtx ctx;
-
-	if (NULL == p) return MPP_ERR_NULL_PTR;
-
-	mpi = p->mpi;
-	ctx = p->ctx;
-
-	//
-	if (p->type == MPP_VIDEO_CodingAVC || p->type == MPP_VIDEO_CodingHEVC) {
-		packet = NULL;
-		ret = mpi->control(ctx, MPP_ENC_GET_EXTRA_INFO, &packet);
-		if (ret) {
-			_log("mpi control enc get extra info failed\n");
-			return ret;
-		}
-		std::cout << "in write head 1" << std::endl;
-
-		/* get and write sps/pps for H.264 */
-		if (packet) {
-			void *ptr = mpp_packet_get_pos(packet);
-			*length = mpp_packet_get_length(packet);
-
-			memcpy(dst, ptr, *length);
-
-			packet = NULL;
-			std::cout << "in write head 2" << std::endl;
-		}
-	}
-	return ret;
-}
-
-MPP_RET MppEncoder::WriteHeadInfo(FILE* fp)
-{
-    MPP_RET ret = MPP_OK;
-    MppApi *mpi;
-    MppCtx ctx;
-
-    if (NULL == p)
-        return MPP_ERR_NULL_PTR;
-
-    mpi = p->mpi;
-    ctx = p->ctx;
-
-    //
-    if (p->type == MPP_VIDEO_CodingAVC || p->type == MPP_VIDEO_CodingHEVC) {
-        MppPacket m_packet = NULL;
-
-        /*
-         * Can use packet with normal malloc buffer as input not pkt_buf.
-         * Please refer to vpu_api_legacy.cpp for normal buffer case.
-         * Using pkt_buf buffer here is just for simplifing demo.
-         */
-        mpp_packet_init_with_buffer(&m_packet, p->pkt_buf);
-        /* NOTE: It is important to clear output packet length!! */
-        mpp_packet_set_length(m_packet, 0);
-
-        ret = mpi->control(ctx, MPP_ENC_GET_EXTRA_INFO, &m_packet);
-        if (ret) {
-            _log("mpi control enc get extra info failed\n");
-            return ret;
-        }else{
-        /* get and write sps/pps for H.264 */
-            void *ptr   = mpp_packet_get_pos(m_packet);
-            int len  = mpp_packet_get_length(m_packet);
-
-            fwrite(ptr, len, 1, fp);
-
-            m_packet = NULL;
-        }
-		mpp_packet_deinit(&m_packet);
-    }
-    return ret;
-}
-#endif
-
-//override
-// MPP_RET MppEncoder::encode(const cv::Mat& img, char* dst, int *length)
-// {
-//     MPP_RET ret = MPP_OK;
-//     MppApi *mpi;
-//     MppCtx ctx;
-
-// 	char *tmpP = dst;
-// 	*length = 0;
-// 	// for test group
-// 	// mpp默认设置为IPPPPP帧的模式， p->gop 为60帧
-// 	//即每隔60帧写一次头信息
-// 	// std::cout << " p->gop is:" << p->gop << std::endl;
-// 	if (0 == (countIdx_ % 60)) {
-// 		countIdx_ = 0;
-
-// 		int len = 0;
-
-// 		WriteHeadInfo(tmpP, &len);
-// 		tmpP += len;
-// 		*length += len;
-// 	}
-
-// 	if (NULL == p) return MPP_ERR_NULL_PTR;
-
-// 	mpi = p->mpi;
-// 	ctx = p->ctx;
-
-// 	MppFrame frame = NULL;
-// 	packet = NULL;
-// 	MppMeta meta = NULL;
-// 	RK_U32 eoi = 1;
-
-// 	void *buf = mpp_buffer_get_ptr(p->frm_buf);
-
-// 	//将数据转为yuv I420 420p
-// 	cv::Mat yuvImg;
-// 	cv::cvtColor(img, yuvImg, CV_BGR2YUV_I420);
-
-// 	std::cout <<"cols and rows are: "<< yuvImg.cols << "  " << yuvImg.rows << std::endl;
-// 	memcpy(buf, yuvImg.data, yuvImg.cols * yuvImg.rows);
-
-//     ret = mpp_frame_init(&frame);
-//     if (ret) {
-//         _log("mpp_frame_init failed\n");
-//         return ret;
-//     }
-//     mpp_frame_set_width(frame, p->width);
-//     mpp_frame_set_height(frame, p->height);
-//     mpp_frame_set_hor_stride(frame, p->hor_stride);
-//     mpp_frame_set_ver_stride(frame, p->ver_stride);
-//     mpp_frame_set_fmt(frame, p->fmt);
-//     mpp_frame_set_eos(frame, p->frm_eos);
-
-//     mpp_frame_set_buffer(frame, p->frm_buf);
-//     meta = mpp_frame_get_meta(frame);
-//     mpp_packet_init_with_buffer(&packet, p->pkt_buf);
-//     /* NOTE: It is important to clear output packet length!! */
-//     mpp_packet_set_length(packet, 0);
-//     mpp_meta_set_packet(meta, KEY_OUTPUT_PACKET, packet);
-  
-// 	/*
-//      * NOTE: in non-block mode the frame can be resent.
-//      * The default input timeout mode is block.
-//      *
-//      * User should release the input frame to meet the requirements of
-//      * resource creator must be the resource destroyer.
-//      */
-//     ret = mpi->encode_put_frame(ctx, frame);
-//     if (ret) {
-//         _log("mpp encode put frame failed\n");
-//         mpp_frame_deinit(&frame);
-//         return ret;
-//     }
-//     mpp_frame_deinit(&frame);
-//     do {
-//         ret = mpi->encode_get_packet(ctx, &packet);
-//         if (ret) {
-//             _log("mpp encode get packet failed\n");
-//             return ret;
-//         }
-        
-// 		//    mpp_assert(packet);
-
-//         if (packet) {
-//             // write packet to file here
-//             void *ptr   = mpp_packet_get_pos(packet);
-//             size_t len  = mpp_packet_get_length(packet);
-  
-//             p->pkt_eos = mpp_packet_get_eos(packet);
-//             memcpy(tmpP, ptr, len);
-// 			*length += len;
-            
-//             /* for low delay partition encoding */
-//             if (mpp_packet_is_partition(packet)) {
-//                 eoi = mpp_packet_is_eoi(packet);
-//                 _log(" pkt %d", p->frm_pkt_cnt);
-//                 p->frm_pkt_cnt = (eoi) ? (0) : (p->frm_pkt_cnt + 1);
-//             }
-            
-//             if (mpp_packet_has_meta(packet)) {
-//                 meta = mpp_packet_get_meta(packet);
-//                 RK_S32 temporal_id = 0;
-//                 RK_S32 lt_idx = -1;
-//                 RK_S32 avg_qp = -1;
-//                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_TEMPORAL_ID, &temporal_id))
-//                 	_log(" tid %d", temporal_id);
-//                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_LONG_REF_IDX, &lt_idx))
-//                     _log(" lt %d", lt_idx);
-//                 if (MPP_OK == mpp_meta_get_s32(meta, KEY_ENC_AVERAGE_QP, &avg_qp))
-//                     _log(" qp %d", avg_qp);
-//             }
-//             mpp_packet_deinit(&packet);
-//             p->stream_size += len;
-//             p->frame_count += eoi;
-//             if (p->pkt_eos) {
-//                 _log("%p found last packet\n", ctx);
-
-//             }
-//         }
-//     } while (!eoi);
-
-    
-
-// 	return ret;
-// }
-//int MppEncoder::set_encparam(int bitrate)
-
 // 设置码率
 int MppEncoder::set_bitrate(int bitrate)
 {
@@ -671,7 +464,7 @@ int MppEncoder::requireIFrame()
 }
 
 //MPP_RET MppEncoder::encode(const void* mb_in, char* dst, int *length)
-MPP_RET MppEncoder::encode(const void* mb_in, void *mb_out)
+MPP_RET MppEncoder::encode(const void* mb_in, void **mb_out)
 {
     MPP_RET ret = MPP_OK;
     MppApi *mpi;
@@ -705,7 +498,7 @@ MPP_RET MppEncoder::encode(const void* mb_in, void *mb_out)
 	////////////////////////////////mb out/////////////////////////////////////
 	packet = NULL;
 
-	MEDIA_BUFFER omb = (MEDIA_BUFFER)mb_out;
+	//MEDIA_BUFFER omb = (MEDIA_BUFFER)mb_out;
 #if 0
 	void* out_data;
 	RK_S32 out_size;
@@ -857,16 +650,20 @@ MPP_RET MppEncoder::encode(const void* mb_in, void *mb_out)
 			//output->SetUSTimeStamp(pts);
 			//output->SetEOF(out_eof);
 			// 编码后的数据仅仅需要数据长度，是否是I真可以从数据中判断
-#if 1
-			_log("\n\n==========================> packet size:%ld, ptr:%p %p\n",
-					len, ptr, RK_MPI_MB_GetPtr(omb));
+			// 复制到mb中
+#if 0
+			printf("\n\n==========================> packet size:%ld, ptr:%p %p\n",
+					len, ptr, packet);
 			memcpy(RK_MPI_MB_GetPtr(omb),  ptr, len);
 			RK_MPI_MB_SetSize(omb, len);
 			//RK_MPI_MB_SetTimestamp(omb, pts_out);
-#endif
-
 			// 最后释放packet
             mpp_packet_deinit(&packet);
+#else
+			// 将 packet 传递出去,减少一次copy
+			*mb_out = packet;
+#endif
+
 
         }
     } while (!eoi);
@@ -875,6 +672,20 @@ MPP_RET MppEncoder::encode(const void* mb_in, void *mb_out)
     
 
 	return ret;
+}
+
+int get_packet_info(void *packet, void **ptr, unsigned int *size, unsigned long long *pts)
+{
+	if(packet == NULL)
+	{
+		printf("error in get packet info!\n");
+		return -1;
+	}
+	*ptr   = mpp_packet_get_pos(packet);
+	*size = mpp_packet_get_length(packet);
+	*pts = mpp_packet_get_pts(packet);
+	//printf(" get packet info pts==%lld %p, %u %p\n", *pts, *ptr, *size, packet);
+	return 0;
 }
 
 #if 0

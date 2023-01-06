@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <unistd.h>
+#include <queue>
 #include "easymedia/rkmedia_api.h"
 #include "myutils.h"
 #include "h264_file_parse.h"
@@ -53,6 +54,8 @@ typedef struct s_h264_rkmedia_dec
     osee::MppEncoder mppenc;
 	unsigned int w, h;
 	FILE *enc_h264;
+
+	std::queue<void *> queue_packet;
 }t_h264_rkmedia_dec;
 
 // 获得h264 帧，可以进行解码
@@ -125,13 +128,17 @@ static void *GetMediaBuffer(void *arg)
 		}                                                                            
 	print_fps("==================>from h264 file recv h264 =");
 
+	static unsigned long long _ts = 0;
+	_ts += 17;
+	RK_MPI_MB_SetTimestamp(mb, _ts);
+
 #if 1
-		log_print("Get Frame:ptr:%p, fd:%d, size:%zu, mode:%d, channel:%d, "            
-				"timestamp:%lld, ImgInfo:<wxh %dx%d, fmt 0x%x>\n",                   
-				RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetFD(mb), RK_MPI_MB_GetSize(mb), 
-				RK_MPI_MB_GetModeID(mb), RK_MPI_MB_GetChannelID(mb),                 
-				RK_MPI_MB_GetTimestamp(mb), stImageInfo.u32Width,                    
-				stImageInfo.u32Height, stImageInfo.enImgType);  
+		log_print("Get Frame:ptr:%p, fd:%d, size:%zu, mode:%d, channel:%d, "
+				"timestamp:%lld, ImgInfo:<wxh %dx%d, fmt 0x%x>\n",
+				RK_MPI_MB_GetPtr(mb), RK_MPI_MB_GetFD(mb), RK_MPI_MB_GetSize(mb),
+				RK_MPI_MB_GetModeID(mb), RK_MPI_MB_GetChannelID(mb),
+				RK_MPI_MB_GetTimestamp(mb), stImageInfo.u32Width,
+				stImageInfo.u32Height, stImageInfo.enImgType);
 #endif
 		// 写入解码后数据
 		if(dec->fp_yuv)
@@ -157,18 +164,82 @@ static void *GetMediaBuffer(void *arg)
 			log_error("ERROR: BufferPool get null buffer...\n");
 			exit(1);
 		}
+#if 0
         dec->mppenc.encode((void*)mb, _mb);
+#else
+		void *packet;
+		dec->mppenc.encode((void*)mb, &packet); 
+		assert(packet != NULL);
+
+		// 缓存packet
+		dec->queue_packet.push(packet);
+		//printf("============> packet:%p %lu\n", packet, dec->queue_packet.size());
+#endif
 		
 		// 写入编码后额h264数据
 		if(dec->enc_h264)
 		{
+#if 0
 			fwrite(RK_MPI_MB_GetPtr(_mb), RK_MPI_MB_GetSize(_mb), 1, dec->enc_h264);
+#else
+			void *ptr = nullptr;
+			unsigned int size;
+			unsigned long long pts;
+		
+			size_t _size = dec->queue_packet.size();
+			//printf("size = %lu\n", _size);
+
+			// 超过最多缓存数量时，出队
+			if(_size > 60)
+			{
+				void *_packet = dec->queue_packet.front();
+				assert(_packet != NULL);
+				//printf("============> _packet:%p\n", _packet);
+
+				osee::get_packet_info(_packet, &ptr, &size, &pts);
+				//printf("encode pts==%lld %p, %u\n", pts, ptr, size);
+				//fwrite(ptr, size, 1, dec->enc_h264);
+				static unsigned long long old_pts = 0;
+				if(old_pts != 0)
+				{
+					if(pts - old_pts != 17)
+					{
+						printf("error in pts!\n");
+						exit(1);
+					}
+				}
+				old_pts = pts;
+				
+
+				mpp_packet_deinit(&_packet);
+				dec->queue_packet.pop();
+			}
+#endif
 		}
 		
 
 		RK_MPI_MB_ReleaseBuffer(mb);
 		RK_MPI_MB_ReleaseBuffer(_mb);
 	}
+
+	//while(dec->queue_packet.size() > 0)
+	{
+		void *ptr = nullptr;
+		unsigned int size;
+		unsigned long long pts;
+		void *_packet = dec->queue_packet.front();
+		assert(_packet != NULL);
+		printf("============> _packet:%p\n", _packet);
+
+		osee::get_packet_info(_packet, &ptr, &size, &pts);
+		//printf("encode pts==%lld %p, %u\n", pts, ptr, size);
+		fwrite(ptr, size, 1, dec->enc_h264);
+		//mpp_packet_deinit(&packet);
+
+		mpp_packet_deinit(&_packet);
+		dec->queue_packet.pop();
+	}
+
 	return NULL;
 }
 
@@ -190,7 +261,7 @@ static void *test_h264_dec_proc(void *param)
 	FILE* fp_yuv = fopen("out.yuv", "wb+");
 	int ret;
 
-	memset((void*)&dec, 0, sizeof(t_h264_rkmedia_dec));
+	//memset((void*)&dec, 0, sizeof(t_h264_rkmedia_dec));
 	int w=1920;
 	int h = 1080;
 

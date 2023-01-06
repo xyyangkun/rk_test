@@ -33,8 +33,10 @@
 
 #include "mb_get.h"
 
+
 namespace osee{
 
+int get_packet_info(void *packet, void **ptr, unsigned int *size, unsigned long long *pts);
 typedef void *MppEncRefCfg;
 
 typedef struct MpiEnc {
@@ -207,7 +209,8 @@ class MppEncoder {
 	 *      *length 编码后的字节数 length <= imgH * imgW * 3/2
 	 *******************************************************/
 	MPP_RET encode(const void* img, int img_len, char* dst, int *length);
-	MPP_RET encode(const void* mb_in, void *mb);
+	//MPP_RET encode(const void* mb_in, void *mb);
+	MPP_RET encode(const void* mb_in, void **mb);
 	void setUp(int width, int height,int fps);
     void MppEncdoerInit(int width, int height, int fps){setUp(width, height, fps); }
 
