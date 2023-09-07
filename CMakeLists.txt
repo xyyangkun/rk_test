@@ -1,6 +1,7 @@
+cmake_minimum_required(VERSION 3.10)
 project(rk_test)
 set(CMAKE_SYSTEM_NAME Linux)
-set(CMAKE_SYSTEM_PROCESSOR arm)
+set(CMAKE_SYSTEM_PROCESSOR arm64)
 
 set(CROSS_COMPILE 1)
 set(TOOLCHAIN_DIR  "/works/rk3568/rk3568_v1_2_4/buildroot/output/rockchip_rk3568/host")
@@ -32,3 +33,4 @@ target_link_libraries(test_rgbcopy rga drm easymedia drm pthread z v4l2 v4l2rds 
 add_executable(test_im2d test_im2d.cpp )
 target_link_libraries(test_im2d rga drm easymedia drm pthread z v4l2 v4l2rds  rockchip_mpp m )
 
+add_subdirectory(player)
