@@ -2,21 +2,32 @@
 <project version="4">
   <component name="PublishConfigData">
     <serverData>
-      <paths name="172.20.2.82 (82807d8d-b765-4085-b09b-c3cf11a1d5b8)">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/tmp/tmp.oVPKE0h7F9" local="$PROJECT_DIR$" />
-          </mappings>
-          <excludedPaths>
-            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
-          </excludedPaths>
-        </serverdata>
-      </paths>
-      <paths name="ubuntu (553917a3-4743-4791-94ea-1da89f0607d3)">
+      <paths name="172.20.2.7 (07f2e31f-1997-4b48-b04f-c7d634b528bb)">
         <serverdata>
           <mappings>
             <mapping local="$PROJECT_DIR$" web="/" />
           </mappings>
+        </serverdata>
+      </paths>
+      <paths name="172.20.2.8 (0557581e-4210-4ddf-9ba0-15e08909790d)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/tmp.IpDEct7mOs" local="$PROJECT_DIR$" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+      <paths name="172.20.2.85 (37df61bd-a18b-4b04-b095-c3e32ca17c72)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/tmp.5iB31wHfQH" local="$PROJECT_DIR$" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
+          </excludedPaths>
         </serverdata>
       </paths>
     </serverData>
