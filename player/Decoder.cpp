@@ -278,6 +278,9 @@ void H264Decoder::reinit()
 
     // 播放显示等待
     pause = true;
+
+    usleep(50*1000);
+
     // 清空队列中的数据
     {
         std::unique_lock<std::mutex> lck(mtx);
@@ -310,6 +313,8 @@ void H264Decoder::reinit()
     video_timeval = 17;
     prev_time={0,0};
     current_time={0,0};
+
+    usleep(50*1000);
 
     pause = false;
 };

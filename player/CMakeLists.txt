@@ -15,10 +15,8 @@ target_link_libraries(test_mp4 ${LINK_LIB_LIST} rvplayer)
 #编译目标设置-DTEST宏
 #https://stackoverflow.com/questions/5096881/does-set-target-properties-in-cmake-override-cmake-cxx-flags
 set_target_properties(test_mp4 PROPERTIES  COMPILE_FLAGS "-DTEST") # ok
-#add_custom_command(TARGET test_mp4
-#        POST_BUILD
-#        COMMAND ${CMAKE_COMMAND} -E copy
-#        "../../release/linux/${BuildType}/test_mp4"
-#        "/nfs/rk3568/osee_live/"
-#        COMMAND ${CMAKE_COMMAND} -E   md5sum "../../release/linux/${BuildType}/test_mp4"
-#        )
+add_custom_command(TARGET test_mp4
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy "test_mp4" "/nfs/rk3568/osee_live/"
+        COMMAND ${CMAKE_COMMAND} -E md5sum "test_mp4"
+        )
