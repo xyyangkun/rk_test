@@ -71,7 +71,14 @@ static void _dbg_init(void)
 static pthread_attr_t attr_read_thread;
 #endif
 
-#define AUDIO_FRAME_SIZE 480
+// line_in -> line_out 20
+// hdmi_in -> line_out 64
+// usb_in  -> hdmi_out 64
+// line_in -> hdmi_out 64
+// hdmi_in -> hdmi_out 64
+// usb_in  -> hdmi_out 64
+
+#define AUDIO_FRAME_SIZE 160
 #define AUDIO_READ_CHN  2  // 2 4
 #define AUDIO_WRITE_CHN 2  // 4 6
 
@@ -238,6 +245,7 @@ void *read_sound_card_proc(void *param)
 
     PCM_LOCALS;
 
+    printf("AUDIO_FRAME_SIZE = %d\n", AUDIO_FRAME_SIZE);
     // 分配两个通道的呢次
     float *effects_buf = (float *)malloc(AUDIO_FRAME_SIZE * 2 * sizeof(float ));
     float *effects_buf_0 = effects_buf;
@@ -351,8 +359,8 @@ int init_alsa()
     alsa_conf.write_channels = AUDIO_WRITE_CHN;
     alsa_conf.buffer_frames = AUDIO_FRAME_SIZE;  // 1024 , 320 ,160  ...
     alsa_conf.format = SND_PCM_FORMAT_S16_LE;
-    sprintf(alsa_conf.read_name, "hw:0,0");   // hw:0,0  hw:1,0 hw:4,0
-    sprintf(alsa_conf.write_name, "hw:0,0");  // hw:0,0  hw:3,0
+    sprintf(alsa_conf.read_name, "hw:0,0");   // hw:0,0 line_in,  hw:1,0 hdmi_in,  hw:4,0 usb_in
+    sprintf(alsa_conf.write_name, "hw:0,0");  // hw:0,0 line_out, hw:3,0 hdmi_out
     alsa_conf.read_handle = nullptr;
     alsa_conf.write_handle = nullptr;
     alsa_conf.read_sound_card_queue = nullptr;
