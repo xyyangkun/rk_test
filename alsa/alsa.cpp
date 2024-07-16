@@ -103,7 +103,8 @@ static pthread_attr_t attr_read_thread;
 
 typedef struct alsa_conf
 {
-    char name[256];       /// 声卡名字
+    char read_name[256];       /// 声卡名字
+    char write_name[256];       /// 声卡名字
     int sample_rate;      /// 48000 16000
     int read_channels;       /// 读取通道数据
     int write_channels;      /// 写通道数据
@@ -273,6 +274,7 @@ void *read_sound_card_proc(void *param)
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
             to[2*i + 0] = from0[2*i + 0];
             to[2*i + 1] = from0[2*i + 1];
+            //printf("read from %d\n", from0[2*i + 0]);
         }
 #elif AUDIO_READ_CHN == 2 && AUDIO_WRITE_CHN == 4
         uint16_t *from0 = (uint16_t *)conf->read_sound_card_buf;
@@ -298,8 +300,8 @@ void *read_sound_card_proc(void *param)
 
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
             // 将数据转换pcm
-            to[2*i + 0] = FLOAT_TO_PCM(effects_buf_0[i]*0.6);
-            to[2*i + 1] = FLOAT_TO_PCM(effects_buf_1[i]*0.6);
+            to[2*i + 0] = FLOAT_TO_PCM(effects_buf_0[i]);
+            to[2*i + 1] = FLOAT_TO_PCM(effects_buf_1[i]);
         }
 #endif
 
@@ -349,7 +351,8 @@ int init_alsa()
     alsa_conf.write_channels = AUDIO_WRITE_CHN;
     alsa_conf.buffer_frames = AUDIO_FRAME_SIZE;  // 1024 , 320 ,160  ...
     alsa_conf.format = SND_PCM_FORMAT_S16_LE;
-    sprintf(alsa_conf.name, "hw:0,0");
+    sprintf(alsa_conf.read_name, "hw:0,0");   // hw:0,0  hw:1,0 hw:4,0
+    sprintf(alsa_conf.write_name, "hw:0,0");  // hw:0,0  hw:3,0
     alsa_conf.read_handle = nullptr;
     alsa_conf.write_handle = nullptr;
     alsa_conf.read_sound_card_queue = nullptr;
@@ -360,7 +363,7 @@ int init_alsa()
 
     dbg("yk debug ");
     // 打开声卡读capture
-    ret = open_sound_card(alsa_conf.name, alsa_conf.sample_rate, alsa_conf.read_channels, alsa_conf.format, &alsa_conf.read_handle, false);
+    ret = open_sound_card(alsa_conf.read_name, alsa_conf.sample_rate, alsa_conf.read_channels, alsa_conf.format, &alsa_conf.read_handle, false);
     if(ret != 0) {
         error("error in read open sound card!");
         return ret;
@@ -374,7 +377,7 @@ int init_alsa()
     alsa_conf.write_sound_card_buf =(char*) malloc(alsa_conf.write_sound_card_size);
 
     // 打开声卡写
-    ret = open_sound_card(alsa_conf.name, alsa_conf.sample_rate, alsa_conf.write_channels, alsa_conf.format, &alsa_conf.write_handle, true);
+    ret = open_sound_card(alsa_conf.write_name, alsa_conf.sample_rate, alsa_conf.write_channels, alsa_conf.format, &alsa_conf.write_handle, true);
     if(ret != 0) {
         error("error in write open sound card!");
         return ret;
