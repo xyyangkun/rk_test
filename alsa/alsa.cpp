@@ -268,12 +268,12 @@ void *read_sound_card_proc(void *param)
 
 
 #if AUDIO_READ_CHN == 2 && AUDIO_WRITE_CHN == 2
-        uint16_t *from0 = (uint16_t *)conf->read_sound_card_buf;
-        uint16_t *to = (uint16_t *)conf->write_sound_card_buf;
-        //for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
-        //    to[2*i + 0] = from0[2*i + 0];
-        //    to[2*i + 1] = from0[2*i + 1];
-        //}
+        int16_t *from0 = (int16_t *)conf->read_sound_card_buf;
+        int16_t *to = (int16_t *)conf->write_sound_card_buf;
+        for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+            to[2*i + 0] = from0[2*i + 0];
+            to[2*i + 1] = from0[2*i + 1];
+        }
 #elif AUDIO_READ_CHN == 2 && AUDIO_WRITE_CHN == 4
         uint16_t *from0 = (uint16_t *)conf->read_sound_card_buf;
         uint16_t *from1 = (uint16_t *)read_file_buf;
@@ -298,8 +298,8 @@ void *read_sound_card_proc(void *param)
 
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
             // 将数据转换pcm
-            to[2*i + 0] = FLOAT_TO_PCM(effects_buf_0[i]);
-            to[2*i + 1] = FLOAT_TO_PCM(effects_buf_1[i]);
+            to[2*i + 0] = FLOAT_TO_PCM(effects_buf_0[i]*0.6);
+            to[2*i + 1] = FLOAT_TO_PCM(effects_buf_1[i]*0.6);
         }
 #endif
 
