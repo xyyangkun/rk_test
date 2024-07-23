@@ -63,7 +63,7 @@ unsigned long UnlockQueue::roundup_power_of_two(unsigned long val)
 
     return andv<<1;
 }
-unsigned int UnlockQueue::Put(const unsigned char *buffer, unsigned int len)
+unsigned int UnlockQueue::Put(const void *buffer, unsigned int len)
 {
    unsigned int l;
 
@@ -93,7 +93,7 @@ unsigned int UnlockQueue::Put(const unsigned char *buffer, unsigned int len)
     return len;
 }
 
-unsigned int UnlockQueue::Get(unsigned char *buffer, unsigned int len)
+unsigned int UnlockQueue::Get(void *buffer, unsigned int len)
 {
     unsigned int l;
 

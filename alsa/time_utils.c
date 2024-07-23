@@ -14,8 +14,7 @@
 
 #include <inttypes.h> // PRIu64
 
-// 输出时间差的文件
-#define TIME_DIFF_OUTPATH "/tmp/audio_time_diff"
+
 
 typedef struct s_time_diff{
     bool start;
@@ -44,13 +43,13 @@ typedef struct s_time_diff{
 
 
 // 创建时间handle
-void *time_diff_create(){
+void *time_diff_create(const char *time_diff_name){
     t_time_diff * diff = (t_time_diff *)malloc(sizeof(t_time_diff));
     memset(diff, 0, sizeof(t_time_diff));
     diff->start = false;
     diff->time_count = 0;
     diff->time_all = 0;
-    diff->fp = fopen(TIME_DIFF_OUTPATH, "wb");
+    diff->fp = fopen(time_diff_name, "wb");
     if(!diff->fp){
         printf("ERROR in time_diff_create:%s\n", strerror(errno));
         exit(1);

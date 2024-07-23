@@ -30,8 +30,8 @@ public:
     // 已经使用的空间 >= 总空间 - 要输入的空间 时才可以
     bool IsEnough(unsigned int input_size){return m_nIn - m_nOut <= m_nSize - input_size;};
 
-    unsigned int Put(const unsigned char *pBuffer, unsigned int nLen);
-    unsigned int Get(unsigned char *pBuffer, unsigned int nLen);
+    unsigned int Put(const void *pBuffer, unsigned int nLen);
+    unsigned int Get(void *pBuffer, unsigned int nLen);
 
     inline void Clean() { m_nIn = m_nOut = 0; }
     inline unsigned int GetDataLen() const { return  m_nIn - m_nOut; }
