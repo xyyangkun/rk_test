@@ -2,6 +2,7 @@
 #include <csignal>
 #include "alsa_read_write.h"
 #include "alsa.h"
+#include "usb_camer_audio.h"
 
 
 static bool quit = false;
@@ -17,6 +18,9 @@ int main(int argc, char *argv[])
     signal(SIGTERM, sigterm_handler);
     signal(SIGUSR1, sigterm_handler);
 
+    // 仅仅用于发于usb camera带的声卡
+    init_usb_camera();
+
     init_alsa();
 
     while (!quit) {
@@ -26,7 +30,7 @@ int main(int argc, char *argv[])
     printf("--------------------------->>>>>>>> deinit!");
 
     deinit_alsa();
-
+    deinit_usb_camera();
     printf("debug quit over!!\n");
 
     return 0;

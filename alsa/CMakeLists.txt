@@ -3,7 +3,7 @@
 ###################################################################################
 # rv1126 sample code
 set(target "alsa_read_write")
-add_executable(${target} ${target}.cpp alsa_log.c UnlockQueue.cpp time_utils.c alsa.cpp)
+add_executable(${target} ${target}.cpp alsa_log.c UnlockQueue.cpp time_utils.c alsa.cpp sound_card_get.c usb_camera_notify.c usb_camera_get.c usb_camer_audio.cpp)
 target_link_libraries(${target} asound)
 #编译目标设置-DTEST宏
 #https://stackoverflow.com/questions/5096881/does-set-target-properties-in-cmake-override-cmake-cxx-flags

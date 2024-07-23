@@ -78,9 +78,6 @@ static pthread_attr_t attr_read_hdmi_in_thread;
 // hdmi_in -> hdmi_out 64
 // usb_in  -> hdmi_out 64
 
-#define AUDIO_FRAME_SIZE 480
-#define AUDIO_READ_CHN  2  // 2 4
-#define AUDIO_WRITE_CHN 2  // 4 6
 
 #define QUEUE_CACHE_SIZE 5
 #define QUEUE_SIZE (QUEUE_CACHE_SIZE - 2)
@@ -736,12 +733,12 @@ int init_alsa()
     }
 
 
-    // 打开usb_in声卡读capture
-    ret = open_sound_card(alsa_conf.usb_in_read_name, alsa_conf.sample_rate, alsa_conf.read_channels, alsa_conf.format, &alsa_conf.usb_in_handle, false);
-    if(ret != 0) {
-        error("error in read open sound card!");
-        return ret;
-    }
+    // // 打开usb_in声卡读capture
+    // ret = open_sound_card(alsa_conf.usb_in_read_name, alsa_conf.sample_rate, alsa_conf.read_channels, alsa_conf.format, &alsa_conf.usb_in_handle, false);
+    // if(ret != 0) {
+    //     error("error in read open sound card!");
+    //     return ret;
+    // }
 
     // 分配读line_in声卡内存
     alsa_conf.line_in_read_size = alsa_conf.buffer_frames * snd_pcm_format_width(alsa_conf.format) / 8 * alsa_conf.read_channels;

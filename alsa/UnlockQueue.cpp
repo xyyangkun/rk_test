@@ -80,7 +80,7 @@ unsigned int UnlockQueue::Put(const void *buffer, unsigned int len)
     memcpy(m_pBuffer + (m_nIn & (m_nSize - 1)), buffer, l);
 
     /* then put the rest (if any) at the beginning of the buffer */
-    memcpy(m_pBuffer, buffer + l, len - l);
+    memcpy(m_pBuffer, (char *)buffer + l, len - l);
 
     /*
      * Ensure that we add the bytes to the kfifo -before-
@@ -110,7 +110,7 @@ unsigned int UnlockQueue::Get(void *buffer, unsigned int len)
     memcpy(buffer, m_pBuffer + (m_nOut & (m_nSize - 1)), l);
 
     /* then get the rest (if any) from the beginning of the buffer */
-    memcpy(buffer + l, m_pBuffer, len - l);
+    memcpy((char *)buffer + l, m_pBuffer, len - l);
 
     /*
      * Ensure that we remove the bytes from the kfifo -before-
