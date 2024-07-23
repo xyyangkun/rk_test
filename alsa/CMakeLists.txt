@@ -21,7 +21,7 @@ add_custom_command(TARGET ${target}
 ###################################################################################
 # rv1126 sample code
 set(target "alsa_hello")
-add_executable(${target} ${target}.cpp )
+add_executable(${target} ${target}.cpp UnlockQueue.cpp)
 #target_link_libraries(${target} asound)
 #编译目标设置-DTEST宏
 #https://stackoverflow.com/questions/5096881/does-set-target-properties-in-cmake-override-cmake-cxx-flags

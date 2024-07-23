@@ -470,6 +470,11 @@ int deinit_alsa()
     pthread_attr_destroy(&attr_read_thread);
 #endif
 
+    if(alsa_conf.read_sound_card_queue) {
+        free(alsa_conf.read_sound_card_queue);
+        alsa_conf.read_sound_card_queue = nullptr;
+    }
+
     info("debug quit");
     return 0;
 }

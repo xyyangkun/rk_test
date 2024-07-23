@@ -4,6 +4,8 @@
 
 #include <stdio.h>
 #include <cstdint>
+#include <cstdlib>
+#include "UnlockQueue.h"
 
 
 #define LSX_USE_VAR(x)  ((void)(x)) /* Parameter or variable is intentionally unused. */
@@ -33,6 +35,18 @@
 
 int main()
 {
+    UnlockQueue *queue = new UnlockQueue(5 * sizeof(void*));
+    queue->Initialize();
+    printf("======> empty %d\n", queue->IsEmpty());
+    for(int i=0; i<5; i++)
+    {
+        char *p = (char *)malloc(10);
+        int size = sizeof(void*);
+        printf("malloc ------------>%p\n", p);
+        queue->Put((const unsigned char *)&p, size);
+    }
+    printf("======> %d %d\n", queue->IsFull(), queue->GetDataLen());
+
     uint16_t t16 = 32768/2;
     float f=0.5;
     PCM_LOCALS;
@@ -43,5 +57,15 @@ int main()
     t16 = FLOAT_TO_PCM(f);
     printf("t16=%d   %f\n", t16, f);
 
+    while(queue->GetDataLen() > 0)
+    {
+        char *p = nullptr;
+        int size = sizeof(void*);
+        queue->Get((unsigned char *)&p, size);
+        printf("free ------------>%p\n", p);
+        free(p);
+    }
+    printf("======> empty %d\n", queue->IsEmpty());
+    delete queue;
     return 0;
 }
