@@ -373,6 +373,8 @@ void *read_line_in_sound_card_proc(void *param)
 
     int start = 0;
 
+    int hdmi_start = 0;
+
     PCM_LOCALS;
 
     printf("AUDIO_FRAME_SIZE = %d\n", AUDIO_FRAME_SIZE);
@@ -612,7 +614,13 @@ void *read_line_in_sound_card_proc(void *param)
             //exit (1);
         }
 
-#if 0
+#if 1
+        if(hdmi_start == 0) {
+            // 先写一部分数据填充，防止声卡没有足够的数据出现问题
+            snd_pcm_writei(conf->hdmi_out_handle, buf, AUDIO_FRAME_SIZE);
+            hdmi_start = 1;
+        }
+
         // 写hdmi_out声卡
         err = snd_pcm_writei(conf->hdmi_out_handle, conf->line_out_write_buf, conf->buffer_frames);
         if (err == -EPIPE) {
@@ -662,9 +670,9 @@ int init_alsa()
     alsa_conf.format = SND_PCM_FORMAT_S16_LE;
     sprintf(alsa_conf.line_in_read_name, "hw:0,0");   // hw:0,0 line_in,  hw:1,0 hdmi_in,  hw:4,0 usb_in
     sprintf(alsa_conf.hdmi_in_read_name, "hw:1,0");   // hw:1,0 hdmi_in   固定
-    sprintf(alsa_conf.usb_in_read_name, "hw:4,0");   // hw:1,0 hdmi_in   固定
+    sprintf(alsa_conf.usb_in_read_name, "hw:4,0");    // hw:4,0 usb_in   固定
 
-    sprintf(alsa_conf.line_out_write_name, "hw:0,0");  // hw:0,0 line_out, hw:3,0 hdmi_out
+    sprintf(alsa_conf.line_out_write_name, "hw:0,0");  // hw:0,0 line_out
 
     sprintf(alsa_conf.hdmi_out_write_name, "hw:3,0");  // hw:3,0 hdmi_out  固定
 
