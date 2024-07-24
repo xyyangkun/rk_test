@@ -164,7 +164,7 @@ typedef struct alsa_conf
     UnlockQueue *hdmi_in_read_queue;
 
     UnlockQueue *hdmi_in_cache_queue; // hdmi in缓存队列
-    UnlockQueue *usb_in_cache_queue;  // usb in缓存队列
+    UnlockQueue *usb_in_queue;  // usb in缓存队列
 }t_alsa_conf;
 
 typedef struct s_audio_buffer
@@ -175,6 +175,11 @@ typedef struct s_audio_buffer
 }t_audio_buffer;
 
 static t_alsa_conf alsa_conf;
+
+UnlockQueue * get_usb_queue()
+{
+    return alsa_conf.usb_in_queue;
+}
 
 /**
  * @brief 打开声卡
@@ -366,6 +371,10 @@ void *read_line_in_sound_card_proc(void *param)
 
     char *hdmi_in_read_buf = (char *)malloc(alsa_conf.buffer_frames*20*alsa_conf.write_channels);
 
+
+    char *usb_in_read_buf = (char *)malloc(alsa_conf.buffer_frames*20*alsa_conf.write_channels);
+
+
     int tmp[1024] = {0};
 
     int start = 0;
@@ -552,6 +561,19 @@ void *read_line_in_sound_card_proc(void *param)
 //
 
 
+
+        int usb_queue_size = alsa_conf.usb_in_queue->GetDataLen();
+        //printf("usb queue size:%d\n", usb_queue_size);
+        if(usb_queue_size >= conf->buffer_frames*2*2)
+        {
+            alsa_conf.usb_in_queue->Get(usb_in_read_buf, conf->buffer_frames*2*2);
+            //memset(usb_in_read_buf, 0, conf->buffer_frames*2*2);
+        } else{
+            memset(usb_in_read_buf, 0, conf->buffer_frames*2*2);
+        }
+
+        int16_t *from2 = (int16_t *)usb_in_read_buf;
+
 #if AUDIO_READ_CHN == 2 && AUDIO_WRITE_CHN == 2
         int16_t *from0 = (int16_t *)conf->line_in_read_buf;
         int16_t *to = (int16_t *)conf->line_out_write_buf;
@@ -578,8 +600,8 @@ void *read_line_in_sound_card_proc(void *param)
 #if 1
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
             // 转换成浮点数
-            effects_buf_0[i] = INT16_TO_FLOAT( from0[2*i + 0] + from1[2*i + 0]);
-            effects_buf_1[i] = INT16_TO_FLOAT( from0[2*i + 1] + from1[2*i + 1]);
+            effects_buf_0[i] = INT16_TO_FLOAT( from0[2*i + 0] + from1[2*i + 0] + from2[2*i + 0]);
+            effects_buf_1[i] = INT16_TO_FLOAT( from0[2*i + 1] + from1[2*i + 1] + from2[2*i + 1]);
         }
 
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
@@ -649,6 +671,7 @@ void *read_line_in_sound_card_proc(void *param)
     free(buf);
     free(hdmi_in_read_buf);
     free(hdmi_in_local_queue_buf);
+    free(usb_in_read_buf);
     if(hdmi_in_local_queue) {
         delete hdmi_in_local_queue;
         hdmi_in_local_queue = nullptr;
@@ -686,7 +709,7 @@ int init_alsa()
     alsa_conf.line_in_read_queue = nullptr;
     alsa_conf.hdmi_in_read_queue = nullptr;
     alsa_conf.hdmi_in_cache_queue = nullptr;
-    alsa_conf.usb_in_cache_queue  = nullptr;
+    alsa_conf.usb_in_queue  = nullptr;
 
     // 创建队列缓冲区
     alsa_conf.line_in_read_queue = new UnlockQueue(1024 * alsa_conf.read_channels * 2 * 16);
@@ -708,13 +731,8 @@ int init_alsa()
         }
         info("===============> hdmi in cache size:%d %d\n", alsa_conf.hdmi_in_cache_queue->GetDataLen(), alsa_conf.hdmi_in_cache_queue->IsFull());
 
-        alsa_conf.usb_in_cache_queue = new UnlockQueue(QUEUE_CACHE_SIZE * sizeof(void*));
-        alsa_conf.usb_in_cache_queue->Initialize();
-        for(int i=0; i<QUEUE_CACHE_SIZE; i++)
-        {
-            t_audio_buffer *p = (t_audio_buffer *)malloc( AUDIO_FRAME_SIZE * alsa_conf.read_channels * 2 * 2);
-            alsa_conf.usb_in_cache_queue->Put((const unsigned char *)&p, sizeof(void*));
-        }
+        alsa_conf.usb_in_queue = new UnlockQueue(AUDIO_FRAME_SIZE * 20 * 4);
+        alsa_conf.usb_in_queue->Initialize();
     }
 
 
@@ -944,16 +962,9 @@ int deinit_alsa()
         delete(alsa_conf.hdmi_in_read_queue);
         alsa_conf.hdmi_in_read_queue = nullptr;
     }
-    if(alsa_conf.usb_in_cache_queue) {
-        while(!alsa_conf.usb_in_cache_queue->IsEmpty())
-        {
-            uint16_t *p = nullptr;
-            int size = sizeof(sizeof(void*));
-            alsa_conf.usb_in_cache_queue->Get((unsigned char *)&p, size);
-            free(p);
-        }
-        delete(alsa_conf.usb_in_cache_queue);
-        alsa_conf.usb_in_cache_queue = nullptr;
+    if(alsa_conf.usb_in_queue) {
+        delete(alsa_conf.usb_in_queue);
+        alsa_conf.usb_in_queue = nullptr;
     }
 
 #if SET_THREAD_PRIORITY == 1

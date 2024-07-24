@@ -11,73 +11,163 @@
 #include "usb_camera_notify.h"
 #include "sound_card_get.h"
 #include "alsa.h"
-
+#include "UnlockQueue.h"
+#include <soxr.h>
 
 int open_sound_card(char *name, int samplerate, int channels, snd_pcm_format_t format, snd_pcm_t **handle, bool is_write, bool is_block = true);
 int close_sound_card(snd_pcm_t **handle);
 
 static snd_pcm_t * usb_in_handle;
 static int read_usb_sound_card_quit = false;
+soxr_t soxr = NULL;
 // 读声卡线程
 pthread_t read_usb_sound_card_th = 0;
 
 
-
+UnlockQueue * get_usb_queue();
 
 // 读取声卡线程
 void *read_usb_in_sound_card_proc(void *param)
 {
+    if(!param)
+    {
+        printf("error in null param!\n");
+        exit(1);
+    }
+    sound_card_info *p_info = (sound_card_info *)param;
+
+    double const irate = (float)p_info->sample;
+    double const orate = 48000.;
+    // AV_SAMPLE_FMT_S16  SOXR_INT16_I c1 c1 c1 c1 .... c2 c2 c2 c2 .    // 单声道使用这个
+    // AV_SAMPLE_FMT_S16P SOXR_INT16_S c1 c2 c1 c2 c1 c2 c1 c2...
+    soxr_datatype_t type = SOXR_INT16_I;
+    soxr_io_spec_t io_spec = soxr_io_spec(type, type);
+    soxr_error_t error;
+    size_t odone, written, need_input = 1;
+    /* Create a stream resampler: */
+    soxr = soxr_create(
+            irate, orate, p_info->channels,   /* Input rate, output rate, # of channels. */
+            &error,            /* To report any error during creation. */
+            &io_spec,
+            NULL, NULL); /* Use configuration defaults.*/
+    if(error)
+    {
+        printf("error to crate soxr!, irate=%f channels:%d\n", irate, p_info->channels);
+        exit(1);
+    }
+
+
+    // 分配重采样内存
+#define buf_total_len (1024*2)
+    size_t const olen = (size_t)(orate * buf_total_len / (irate + orate) + .5);
+    size_t const ilen = buf_total_len - olen;
+    size_t const osize = sizeof(int16_t), isize = osize;
+    void *obuf = malloc(osize * olen * p_info->channels);
+    void *ibuf = malloc(isize * ilen * p_info->channels);
+
+    // 最终使用的是立体声48k 16位
+    void *o_send_buf = malloc(sizeof(int16_t) * 2 * buf_total_len);
 
     int err = 0;
-    int queue_read_size = sizeof(int16_t) * 2 * AUDIO_FRAME_SIZE;
+    int queue_read_size = sizeof(int16_t) * 2 * buf_total_len;
 
-    char *buf = (char *)malloc(AUDIO_FRAME_SIZE * 20 * 2);
+    char *buf = nullptr;// (char *)malloc(AUDIO_FRAME_SIZE * 20 * 2);
 
     snd_pcm_status_t *usb_in_status;
     snd_pcm_status_alloca(&usb_in_status);
 
-    printf("AUDIO_FRAME_SIZE = %d\n", AUDIO_FRAME_SIZE);
-
+    printf("in sample:%d channel:%d\n", p_info->sample, p_info->channels);
 #define POINT_SIZE ( 2 * sizeof(int16_t))
 
+    UnlockQueue * usb_queue =  get_usb_queue();
     while(!read_usb_sound_card_quit) {
         {
-            // 获取状态
-            int err = snd_pcm_status(usb_in_handle, usb_in_status);
-            if (err < 0) {
-                printf("无法获取 PCM 状态: %s\n", snd_strerror(err));
-                // 无法获取PCM状态时，就是拔下卡了
-                break;
-            }
-            snd_pcm_state_t state = snd_pcm_status_get_state(  usb_in_status);
-            snd_pcm_uframes_t avail = snd_pcm_status_get_avail(usb_in_status);
-            snd_pcm_uframes_t delay = snd_pcm_status_get_delay(usb_in_status);
 
-            printf(">>>>>>>>>>>>>>>>> delay:%d avail:%d state=%d \n", delay, avail, state);
-
-            // 读usb_in声卡
-            if ((err = snd_pcm_readi(usb_in_handle, buf, AUDIO_FRAME_SIZE)) != AUDIO_FRAME_SIZE) {
-                printf("%d read from audio interface failed (%s)", err, snd_strerror (err));
-                if (err == -EPIPE) {
-                    // 没有及时取走数据
-                    /* EPIPE means overrun */
-                    printf("underrun overrun\n");
-                    snd_pcm_prepare(usb_in_handle);
-                } else if (err < 0) {
-                    printf("error from writei: %s\n", snd_strerror(err));
+            if(need_input)
+            {
+                // 获取状态
+                int err = snd_pcm_status(usb_in_handle, usb_in_status);
+                if (err < 0) {
+                    printf("无法获取 PCM 状态: %s\n", snd_strerror(err));
+                    // 无法获取PCM状态时，就是拔下卡了
+                    break;
                 }
-                // 不进行退出处理
-                // exit (1);
-                usleep(10*1000);
+                snd_pcm_state_t state = snd_pcm_status_get_state(usb_in_status);
+                snd_pcm_uframes_t avail = snd_pcm_status_get_avail(usb_in_status);
+                snd_pcm_uframes_t delay = snd_pcm_status_get_delay(usb_in_status);
+
+                // printf(">>>>>>>>>>>>>>>>> delay:%d avail:%d state=%d \n", delay, avail, state);
+
+                // 读usb_in声卡
+                if ((err = snd_pcm_readi(usb_in_handle, ibuf, ilen)) != ilen) {
+                    printf("%d read from usb audio interface failed (%s)", err, snd_strerror(err));
+                    if (err == -EPIPE) {
+                        // 没有及时取走数据
+                        /* EPIPE means overrun */
+                        printf("underrun overrun\n");
+                        snd_pcm_prepare(usb_in_handle);
+                    } else if (err < 0) {
+                        printf("error from writei: %s\n", snd_strerror(err));
+                    }
+                    // 不进行退出处理
+                    // exit (1);
+                    usleep(10 * 1000);
+                } else {
+                    // printf("read usb audio card size:%d\n", err);
+                }
+            }
+
+
+            int ilen1 = need_input?ilen:0;
+            /* Copy data from the input buffer into the resampler, and resample
+             * to produce as much output as is possible to the given output buffer: */
+            error = soxr_process(soxr, ibuf, ilen1, NULL, obuf, olen, &odone);
+            if(error)
+            {
+                printf("error in soxr !! will exit!\n");
+                exit(1);
+            }
+
+            need_input = odone < olen && ibuf;
+            //printf("channels=%d ilen1:%d olen:%d odone:%d  need_input:%d\n", p_info->channels, ilen1, olen, odone, need_input);
+
+#if 1
+            // 如果是单声道要处理，立体声直接使用
+            if(p_info->channels == 2)
+            {
+                if(usb_queue->GetDataLen() <= 10*AUDIO_FRAME_SIZE*4)
+                    usb_queue->Put(obuf, odone * 4);
+            }
+            else if(p_info->channels == 1)
+            {
+                // printf("usb audio channel 1, will output size:%d\n", odone);
+                memset(o_send_buf, 0, olen * 4);
+                short *p1,*p2;
+                p1 = (short *)obuf;
+                p2 = (short *)o_send_buf;
+                // printf("odeon:%d\n", odone);
+                for(int i=0;i < odone; i++)  // 转换为44.1k 立体声
+                {
+                    p2[2*i] = p1[i];
+                    p2[2*i+1] = p1[i];
+                }
+                if(usb_queue->GetDataLen() <= 10*AUDIO_FRAME_SIZE*4)
+                    usb_queue->Put(o_send_buf, odone * 4);
             } else
             {
-                printf("read usb audio card size:%d\n", err);
+                printf("error channel!!\n");
             }
+#endif
+
+
+
 
         }
 
 
     }
+    printf("debug %s %d  read usb sound card proc will exit!\n", __func__, __LINE__);
+
     close_sound_card(&usb_in_handle);
     usb_in_handle = nullptr;
     printf("debug %s %d  read usb sound card proc will exit!\n", __func__, __LINE__);
@@ -87,6 +177,9 @@ void *read_usb_in_sound_card_proc(void *param)
 #endif
     //snd_pcm_status_free(usb_in_status);
 
+    free(obuf);
+    free(ibuf);
+    free(o_send_buf);
     free(buf);
     return nullptr;
 }
@@ -98,7 +191,7 @@ int init_usb_audio()
     int ret;
 
     // 动态获取usb 配置
-    sound_card_info info;
+    static sound_card_info info;
     char dev_name[100]= {0};
     if(0 != found_sound_card(dev_name))
     {
@@ -125,7 +218,7 @@ int init_usb_audio()
     }
 
     read_usb_sound_card_quit = false;
-    ret = pthread_create(&read_usb_sound_card_th, NULL, read_usb_in_sound_card_proc, NULL);
+    ret = pthread_create(&read_usb_sound_card_th, NULL, read_usb_in_sound_card_proc, &info);
     if (ret != 0) {
         printf("error to create th:%s", strerror(errno));
         exit(1);

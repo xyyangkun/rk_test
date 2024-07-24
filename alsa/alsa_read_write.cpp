@@ -18,19 +18,22 @@ int main(int argc, char *argv[])
     signal(SIGTERM, sigterm_handler);
     signal(SIGUSR1, sigterm_handler);
 
+    init_alsa();
+
     // 仅仅用于发于usb camera带的声卡
     init_usb_camera();
 
-    init_alsa();
 
     while (!quit) {
         usleep(10*1000);
     }
 
-    printf("--------------------------->>>>>>>> deinit!");
+    printf("--------------------------->>>>>>>> deinit! %d\n", __LINE__);
 
-    deinit_alsa();
     deinit_usb_camera();
+    printf("--------------------------->>>>>>>> deinit! %d\n", __LINE__);
+    deinit_alsa();
+
     printf("debug quit over!!\n");
 
     return 0;
