@@ -394,7 +394,8 @@ void *read_line_in_sound_card_proc(void *param)
 
 
 #if TEST_TIME==1
-    void *hd = time_diff_create(TIME_DIFF_OUTPATH);
+    const char *line_in_out = "/tmp/audio_line_time_diff";
+    void *hd = time_diff_create(line_in_out);
 #endif
 
     char *hdmi_in_local_queue_buf = (char *)malloc(queue_read_size);
@@ -403,6 +404,8 @@ void *read_line_in_sound_card_proc(void *param)
     hdmi_in_local_queue = new UnlockQueue( hdmi_in_local_queue_size * 2 * sizeof(int16_t) );
     hdmi_in_local_queue->Initialize();
     bool hdmi_in_start_read = false;
+
+    bool usb_in_start_read = false;
 
     while(!conf->read_sound_card_quit) {
 
@@ -562,24 +565,62 @@ void *read_line_in_sound_card_proc(void *param)
 
 
 
+        /*  usb      7     6     5     4     3     2    1    0
+         *  延迟    : 70    60    50    40    30    20   10   0
+         *  缓存点数 : 3360  2880  2400  1920  1440  960  480  0
+         */
+        int usb_in_start_size =  4 * AUDIO_FRAME_SIZE * POINT_SIZE; // 4包  - 7包之间 [1440, 3360)
+
         int usb_queue_size = alsa_conf.usb_in_queue->GetDataLen();
-        //printf("usb queue size:%d\n", usb_queue_size);
-        if(usb_queue_size >= conf->buffer_frames*2*2)
+        //printf("usb queue size:%d\n", usb_queue_size/(POINT_SIZE));
+
+        // usb队列中有足够的数据时 usb_queue_size >= usb_in_start_size， 才开始取数据
+        if(usb_queue_size >= usb_in_start_size && usb_in_start_read == false)
         {
-            alsa_conf.usb_in_queue->Get(usb_in_read_buf, conf->buffer_frames*2*2);
-            //memset(usb_in_read_buf, 0, conf->buffer_frames*2*2);
-        } else{
+            usb_in_start_read = true;
+            memset(usb_in_read_buf, 0, conf->buffer_frames * POINT_SIZE);
+            printf("usb_in will start read! queue_size:%d\n", queue_size / POINT_SIZE);
+        }
+        else if(usb_queue_size > 0 && usb_in_start_read == true)
+        {
+            if(usb_queue_size <  3 * AUDIO_FRAME_SIZE * POINT_SIZE )
+            {
+                // 数据过少，插点
+                // 少取一个点，最后一个点进行复制
+                alsa_conf.usb_in_queue->Get(usb_in_read_buf, (conf->buffer_frames - 1) * POINT_SIZE);
+                int32_t *p = (int32_t *)usb_in_read_buf;
+                p[conf->buffer_frames - 1] = p[conf->buffer_frames - 2];
+                printf("usb too few data ! will insert data queue_size:%d\n", usb_queue_size / POINT_SIZE);
+            }
+            else if(usb_queue_size >=  7 * AUDIO_FRAME_SIZE * POINT_SIZE)
+            {
+                // 数据过多，丢点
+                // 多取一个点，最后一个点丢弃
+                alsa_conf.usb_in_queue->Get(usb_in_read_buf, (conf->buffer_frames + 1) * POINT_SIZE);
+                printf("usb too much data ! will loss data queue_size:%d\n", usb_queue_size / POINT_SIZE);
+            }
+            else
+            {
+                alsa_conf.usb_in_queue->Get(usb_in_read_buf, conf->buffer_frames* POINT_SIZE);
+            }
+
+        }
+        else{
+            // printf("--------------> error!!! no enough buf!!\n");
+            //continue;
+            usb_in_start_read = false;
             memset(usb_in_read_buf, 0, conf->buffer_frames*2*2);
         }
 
-        int16_t *from2 = (int16_t *)usb_in_read_buf;
+
+        int16_t *from_usb = (int16_t *)usb_in_read_buf;
 
 #if AUDIO_READ_CHN == 2 && AUDIO_WRITE_CHN == 2
-        int16_t *from0 = (int16_t *)conf->line_in_read_buf;
-        int16_t *to = (int16_t *)conf->line_out_write_buf;
+        int16_t *from_line_in = (int16_t *)conf->line_in_read_buf;
+        int16_t *to_out = (int16_t *)conf->line_out_write_buf;
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
-            to[2*i + 0] = from0[2*i + 0];
-            to[2*i + 1] = from0[2*i + 1];
+            to_out[2 * i + 0] = from_line_in[2 * i + 0];
+            to_out[2 * i + 1] = from_line_in[2 * i + 1];
             //printf("read from %d\n", from0[2*i + 0]);
         }
 #elif AUDIO_READ_CHN == 2 && AUDIO_WRITE_CHN == 4
@@ -600,14 +641,14 @@ void *read_line_in_sound_card_proc(void *param)
 #if 1
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
             // 转换成浮点数
-            effects_buf_0[i] = INT16_TO_FLOAT( from0[2*i + 0] + from1[2*i + 0] + from2[2*i + 0]);
-            effects_buf_1[i] = INT16_TO_FLOAT( from0[2*i + 1] + from1[2*i + 1] + from2[2*i + 1]);
+            effects_buf_0[i] = INT16_TO_FLOAT(from_line_in[2 * i + 0] + from1[2 * i + 0] + from_usb[2 * i + 0]);
+            effects_buf_1[i] = INT16_TO_FLOAT(from_line_in[2 * i + 1] + from1[2 * i + 1] + from_usb[2 * i + 1]);
         }
 
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
             // 将数据转换pcm
-            to[2*i + 0] = FLOAT_TO_PCM(effects_buf_0[i]);
-            to[2*i + 1] = FLOAT_TO_PCM(effects_buf_1[i]);
+            to_out[2 * i + 0] = FLOAT_TO_PCM(effects_buf_0[i]);
+            to_out[2 * i + 1] = FLOAT_TO_PCM(effects_buf_1[i]);
         }
 #endif
 
