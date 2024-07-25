@@ -160,8 +160,11 @@ typedef struct alsa_conf
     // 读取声卡的数据放到队列中
     UnlockQueue *line_in_read_queue;
 
-    UnlockQueue *hdmi_in_cache_queue; // hdmi in缓存队列
     UnlockQueue *usb_in_queue;  // usb in缓存队列
+
+    // MP4 播放音频队列
+    UnlockQueue *mp4_sound_queue;
+    int mp4_queue_size = 20; // 包数，不是长度
 
     // 写声音线程，将声音写入aac编码器
     pthread_t write_aac_sound_th;
@@ -536,6 +539,7 @@ void *read_line_in_sound_card_proc(void *param)
 
     char *usb_in_read_buf = (char *)malloc(alsa_conf.buffer_frames*20*alsa_conf.write_channels);
 
+    char *mp4_sound_read_buf = (char *)malloc(alsa_conf.buffer_frames*20*alsa_conf.write_channels);
 
     int tmp[1024] = {0};
 
@@ -559,7 +563,7 @@ void *read_line_in_sound_card_proc(void *param)
     float *usb_in_effects_buf_0 = usb_in_effects_buf;
     float *usb_in_effects_buf_1 = usb_in_effects_buf + AUDIO_FRAME_SIZE;
 
-    // 分配 usb_in 通道数据
+    // 分配 mp4_in 通道数据
     float *mp4_in_effects_buf = (float *)malloc(AUDIO_FRAME_SIZE * 2 * sizeof(float ));
     float *mp4_in_effects_buf_0 = mp4_in_effects_buf;
     float *mp4_in_effects_buf_1 = mp4_in_effects_buf + AUDIO_FRAME_SIZE;
@@ -593,13 +597,16 @@ void *read_line_in_sound_card_proc(void *param)
 
     bool usb_in_start_read = false;
 
+    bool mp4_sound_start_read = false;
+
     while(!conf->read_sound_card_quit) {
 
         static int count = 0;
+#if TEST_TIME==1
+        time_diff_start(hd);
+#endif
 
         {
-
-
             {
 
               // 读line_in声卡
@@ -692,12 +699,6 @@ void *read_line_in_sound_card_proc(void *param)
                 }
             }
         }
-
-
-
-#if TEST_TIME==1
-        time_diff_start(hd);
-#endif
 
 
         int queue_size = hdmi_in_local_queue->GetDataLen();
@@ -799,8 +800,38 @@ void *read_line_in_sound_card_proc(void *param)
         }
 
 
+        /*  mp4      7     6     5     4     3     2    1    0
+         *  延迟    : 70    60    50    40    30    20   10   0
+         *  缓存点数 : 3360  2880  2400  1920  1440  960  480  0
+         */
+        int mp4_sound_start_size =  2 * AUDIO_FRAME_SIZE * POINT_SIZE; // 2包  - 4包之间 [1440, 3360)
+
+        int mp4_sound_queue_size = alsa_conf.mp4_sound_queue->GetDataLen();
+        //printf("mp4 queue size:%d\n", mp4_sound_start_size/(POINT_SIZE));
+
+        // usb队列中有足够的数据时 usb_queue_size >= usb_in_start_size， 才开始取数据
+        if(mp4_sound_queue_size >= mp4_sound_start_size && mp4_sound_start_read == false)
+        {
+            mp4_sound_start_read = true;
+            memset(mp4_sound_read_buf, 0, conf->buffer_frames * POINT_SIZE);
+            // printf("mp4 will start read! queue_size:%d\n", mp4_sound_queue_size / POINT_SIZE);
+        }
+        else if(mp4_sound_start_size > 0 && mp4_sound_start_read == true)
+        {
+            // mp4 没有丢点差点机制
+            alsa_conf.mp4_sound_queue->Get(mp4_sound_read_buf, conf->buffer_frames* POINT_SIZE);
+        }
+        else{
+            // printf("--------------> error!!! no enough buf!!\n");
+            //continue;
+            mp4_sound_start_read = false;
+            memset(mp4_sound_read_buf, 0, conf->buffer_frames*2*2);
+        }
+
+
         int16_t *from_hdmi_in = (int16_t *)hdmi_in_read_buf;
         int16_t *from_usb_in = (int16_t *)usb_in_read_buf;
+        int16_t *from_mp4_in = (int16_t *)mp4_sound_read_buf;
 
         int16_t *from_line_in = (int16_t *)conf->line_in_read_buf;
         int16_t *to_out = (int16_t *)conf->line_out_write_buf;
@@ -841,6 +872,14 @@ void *read_line_in_sound_card_proc(void *param)
         cacl_vu_pk(usb_in_effects_buf_0, usb_in_effects_buf_1,
                    usb_in_peak_l, usb_in_vu_l,
                    usb_in_peak_r, usb_in_vu_r);
+        for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+            // 转换成浮点数，并计算增益
+            mp4_in_effects_buf_0[i] = INT16_TO_FLOAT(from_mp4_in[2 * i + 0]) * mp4_in_volume;
+            mp4_in_effects_buf_1[i] = INT16_TO_FLOAT(from_mp4_in[2 * i + 1]) * mp4_in_volume;
+        }
+        cacl_vu_pk(mp4_in_effects_buf_0, mp4_in_effects_buf_1,
+                   mp4_in_peak_l, mp4_in_vu_l,
+                   mp4_in_peak_r, mp4_in_vu_r);
 
 
         // 混音
@@ -875,8 +914,8 @@ void *read_line_in_sound_card_proc(void *param)
             // mp4_in
             for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
                 // 混音
-                // line_out_effects_buf_0[i] += MP4_in_effects_buf_0[i];
-                // line_out_effects_buf_1[i] += MP4_in_effects_buf_1[i];
+                line_out_effects_buf_0[i] += mp4_in_effects_buf_0[i];
+                line_out_effects_buf_1[i] += mp4_in_effects_buf_1[i];
             }
         }
         if(usb_in_enable != 0)
@@ -1004,6 +1043,7 @@ void *read_line_in_sound_card_proc(void *param)
     free(hdmi_in_read_buf);
     free(hdmi_in_local_queue_buf);
     free(usb_in_read_buf);
+    free(mp4_sound_read_buf);
     if(hdmi_in_local_queue) {
         delete hdmi_in_local_queue;
         hdmi_in_local_queue = nullptr;
@@ -1039,7 +1079,6 @@ int init_alsa()
 
     alsa_conf.line_out_handle = nullptr;
     alsa_conf.line_in_read_queue = nullptr;
-    alsa_conf.hdmi_in_cache_queue = nullptr;
     alsa_conf.usb_in_queue  = nullptr;
     alsa_conf.aac_sound_queue  = nullptr;
     alsa_conf.uac_sound_queue  = nullptr;
@@ -1056,22 +1095,13 @@ int init_alsa()
     alsa_conf.uac_sound_queue = new UnlockQueue(AUDIO_FRAME_SIZE * alsa_conf.read_channels * 2 * alsa_conf.write_uac_queue_size);
     alsa_conf.uac_sound_queue->Initialize();
 
-    // 分配内存
-    {
-        alsa_conf.hdmi_in_cache_queue = new UnlockQueue(/*QUEUE_CACHE_SIZE*/ 8 * sizeof(void*));
-        alsa_conf.hdmi_in_cache_queue->Initialize();
-        for(int i=0; i<8; i++)
-        {
-            // 要多分配内存
-            t_audio_buffer *p = (t_audio_buffer *)malloc( AUDIO_FRAME_SIZE * alsa_conf.read_channels * 2*2);
-            assert(p);
-            alsa_conf.hdmi_in_cache_queue->Put((const unsigned char *)&p, sizeof(void*));
-        }
-        info("===============> hdmi in cache size:%d %d\n", alsa_conf.hdmi_in_cache_queue->GetDataLen(), alsa_conf.hdmi_in_cache_queue->IsFull());
+    // 分配usb声卡队列
+    alsa_conf.usb_in_queue = new UnlockQueue(AUDIO_FRAME_SIZE * 4 * 20);
+    alsa_conf.usb_in_queue->Initialize();
 
-        alsa_conf.usb_in_queue = new UnlockQueue(AUDIO_FRAME_SIZE * 20 * 4);
-        alsa_conf.usb_in_queue->Initialize();
-    }
+    // 分配mp4播放队列
+    alsa_conf.mp4_sound_queue = new UnlockQueue(AUDIO_FRAME_SIZE * 4 * alsa_conf.mp4_queue_size);
+    alsa_conf.mp4_sound_queue->Initialize();
 
 
     dbg("yk debug ");
@@ -1255,21 +1285,14 @@ int deinit_alsa()
         alsa_conf.line_in_read_queue = nullptr;
     }
 
-    if(alsa_conf.hdmi_in_cache_queue) {
-        while(alsa_conf.hdmi_in_cache_queue->GetDataLen() > 0)
-        {
-            t_audio_buffer *p = nullptr;
-            int size = sizeof(sizeof(void*));
-            alsa_conf.hdmi_in_cache_queue->Get((unsigned char *)&p, size);
-            free(p);
-        }
-        delete(alsa_conf.hdmi_in_cache_queue);
-        alsa_conf.hdmi_in_cache_queue = nullptr;
-    }
-
     if(alsa_conf.usb_in_queue) {
         delete(alsa_conf.usb_in_queue);
         alsa_conf.usb_in_queue = nullptr;
+    }
+
+    if(alsa_conf.mp4_sound_queue) {
+        delete(alsa_conf.mp4_sound_queue);
+        alsa_conf.mp4_sound_queue = nullptr;
     }
 
     if(alsa_conf.aac_sound_queue) {
@@ -1339,8 +1362,23 @@ static void *write_uac_sound_proc(void *param)
 }
 
 // mp4播放后，通过函数将48k音频数据传入
-int new_mp4_audio_write(void *data, int size)
+void new_mp4_audio_write(void **data, int size)
 {
-
-    return 0;
+    UnlockQueue *mp4_sound_queue = alsa_conf.mp4_sound_queue;
+    // 队列中超对此长队，暂停向队列中存放数据
+    int mp4_sound_pause_size =  6 * AUDIO_FRAME_SIZE * POINT_SIZE; // 2包  - 4包之间 [1440, 3360)
+    int mp4_sound_stop_size =  15 * AUDIO_FRAME_SIZE * POINT_SIZE; // 2包  - 4包之间 [1440, 3360)
+    int queue_size = mp4_sound_queue->GetDataLen();
+    if(queue_size >= mp4_sound_stop_size)
+    {
+        error("too much data! queue_size:%d\n", queue_size);
+        return ;
+    }
+    if(queue_size < mp4_sound_stop_size )
+    {
+        mp4_sound_queue->Put(data[0], size*4);
+    } else{
+        usleep(10*1000);
+    }
+    return ;
 }
