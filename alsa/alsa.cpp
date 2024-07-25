@@ -725,7 +725,7 @@ void *read_line_in_sound_card_proc(void *param)
         {
             hdmi_in_start_read = true;
             memset(hdmi_in_read_buf, 0, conf->buffer_frames * POINT_SIZE);
-            printf("hdmi_in will start read! queue_size:%d\n", queue_size / POINT_SIZE);
+            // printf("hdmi_in will start read! queue_size:%d\n", queue_size / POINT_SIZE);
         }
         else if(queue_size > 0 && hdmi_in_start_read == true)
         {
@@ -737,14 +737,14 @@ void *read_line_in_sound_card_proc(void *param)
                 hdmi_in_local_queue->Get(hdmi_in_read_buf, (conf->buffer_frames - 1) * POINT_SIZE);
                 int32_t *p = (int32_t *)hdmi_in_read_buf;
                 p[conf->buffer_frames - 1] = p[conf->buffer_frames - 2];
-                printf("hdmi too few data ! will insert data queue_size:%d\n", queue_size / POINT_SIZE);
+                // printf("hdmi too few data ! will insert data queue_size:%d\n", queue_size / POINT_SIZE);
             }
             else if(queue_size >=  4 * AUDIO_FRAME_SIZE * POINT_SIZE)
             {
                 // 数据过多，丢点
                 // 多取一个点，最后一个点丢弃
                 hdmi_in_local_queue->Get(hdmi_in_read_buf, (conf->buffer_frames + 1) * POINT_SIZE);
-                printf("hdmi too much data ! will loss data queue_size:%d\n", queue_size / POINT_SIZE);
+                // printf("hdmi too much data ! will loss data queue_size:%d\n", queue_size / POINT_SIZE);
             }
             else
             {
@@ -777,7 +777,7 @@ void *read_line_in_sound_card_proc(void *param)
         {
             usb_in_start_read = true;
             memset(usb_in_read_buf, 0, conf->buffer_frames * POINT_SIZE);
-            printf("usb_in will start read! queue_size:%d\n", queue_size / POINT_SIZE);
+            // printf("usb_in will start read! queue_size:%d\n", queue_size / POINT_SIZE);
         }
         else if(usb_queue_size > 0 && usb_in_start_read == true)
         {
@@ -788,14 +788,14 @@ void *read_line_in_sound_card_proc(void *param)
                 alsa_conf.usb_in_queue->Get(usb_in_read_buf, (conf->buffer_frames - 1) * POINT_SIZE);
                 int32_t *p = (int32_t *)usb_in_read_buf;
                 p[conf->buffer_frames - 1] = p[conf->buffer_frames - 2];
-                printf("usb too few data ! will insert data queue_size:%d\n", usb_queue_size / POINT_SIZE);
+                // printf("usb too few data ! will insert data queue_size:%d\n", usb_queue_size / POINT_SIZE);
             }
             else if(usb_queue_size >=  7 * AUDIO_FRAME_SIZE * POINT_SIZE)
             {
                 // 数据过多，丢点
                 // 多取一个点，最后一个点丢弃
                 alsa_conf.usb_in_queue->Get(usb_in_read_buf, (conf->buffer_frames + 1) * POINT_SIZE);
-                printf("usb too much data ! will loss data queue_size:%d\n", usb_queue_size / POINT_SIZE);
+                // printf("usb too much data ! will loss data queue_size:%d\n", usb_queue_size / POINT_SIZE);
             }
             else
             {
