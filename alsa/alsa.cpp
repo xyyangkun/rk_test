@@ -367,11 +367,25 @@ static float line_in_volume = 1.0;
 static float usb_in_volume = 1.0;
 static float mp4_in_volume = 1.0;
 static float line_out_volume = 1.0;
+
 void new_set_hdmi_in_volume(float value) {hdmi_in_volume = value;}
 void new_set_line_in_volume(float value) {line_in_volume = value;}
 void new_set_usb_in_volume(float value)  {usb_in_volume = value;}
 void new_set_mp4_in_volume(float value)  {mp4_in_volume = value;}
 void new_set_line_out_volume(float value){line_out_volume = value;}
+
+static int hdmi_in_enable  = 1;
+static int line_in_enable  = 1;
+static int usb_in_enable   = 1;
+static int mp4_in_enable   = 1;
+static int line_out_enable = 1;
+
+void new_set_hdmi_in_enable(int value) {hdmi_in_enable = value;}
+void new_set_line_in_enable(int value) {line_in_enable = value;}
+void new_set_usb_in_enable(int value)  {usb_in_enable = value;}
+void new_set_mp4_in_enable(int value)  {mp4_in_enable = value;}
+void new_set_line_out_enable(int value){line_out_enable = value;}
+
 static float rms_factor_peak =  1.0/131072.0;
 static float rms_factor_rms =  32.0/131072.0;
 static t_meter audio_meter;
@@ -389,6 +403,11 @@ static float line_in_peak_l = 0;
 static float line_in_vu_l =  0;  // rms
 static float line_in_peak_r = 0;
 static float line_in_vu_r =  0;   // rms
+
+static float mp4_in_peak_l = 0;
+static float mp4_in_vu_l =  0;  // rms
+static float mp4_in_peak_r = 0;
+static float mp4_in_vu_r =  0;   // rms
 
 static float line_out_peak_l = 0;
 static float line_out_vu_l =  0;  // rms
@@ -517,6 +536,35 @@ void new_get_meter(void *_meter)
         audio_meter.usb_in.vu_right = i_vu_r  ;
     }
 
+    // mp4_in
+    {
+        i_peak_l = (int32_t)(20.0*log10(  mp4_in_peak_l));
+        i_vu_l   = (int32_t)(20.0 * log10(mp4_in_vu_l));
+        i_peak_r = (int32_t)(20.0*log10(  mp4_in_peak_r));
+        i_vu_r   = (int32_t)(20.0 * log10(mp4_in_vu_r));
+        //i_peak_l += 6;
+        i_vu_l   += 6;
+        //i_peak_r += 6;
+        i_vu_r   += 6;
+        // 检测vu pk值过大，并输出
+        /*
+        if(i_peak_l > 0 || i_vu_l > 0|| i_peak_r > 0|| i_vu_r > 0){
+            osee_error("error in vu_pk peak_l=%d peak_r = %d rms_l=%d rms_r=%d",
+                       i_peak_l, i_peak_r, i_vu_l, i_vu_r );
+        }
+         //*/
+        //osee_print("in vu_pk peak_l=%f==%d peak_r = %f==%d rms_l=%f==%d rms_r=%f==%d",
+        //           peak_l, i_peak_l, peak_r, i_peak_r, vu_l, i_vu_l, vu_r, i_vu_r );
+        i_peak_l= i_peak_l < -40 ? -40 : i_peak_l > 0 ? 0 : i_peak_l;
+        i_vu_l  = i_vu_l   < -40 ? -40 : i_vu_l   > 0 ? 0 : i_vu_l  ;
+        i_peak_r= i_peak_r < -40 ? -40 : i_peak_r > 0 ? 0 : i_peak_r;
+        i_vu_r  = i_vu_r   < -40 ? -40 : i_vu_r   > 0 ? 0 : i_vu_r  ;
+
+        audio_meter.sd.pk_left  = i_peak_l;
+        audio_meter.sd.vu_left  = i_vu_l  ;
+        audio_meter.sd.pk_right = i_peak_r;
+        audio_meter.sd.vu_right = i_vu_r  ;
+    }
 
     // line_out
     {
@@ -837,7 +885,6 @@ void *read_line_in_sound_card_proc(void *param)
         cacl_vu_pk(hdmi_in_effects_buf_0, hdmi_in_effects_buf_1,
                    hdmi_in_peak_l, hdmi_in_vu_l,
                    hdmi_in_peak_r, hdmi_in_vu_r);
-
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
             // 转换成浮点数
             line_in_effects_buf_0[i] = INT16_TO_FLOAT(from_line_in[2 * i + 0]);
@@ -857,20 +904,72 @@ void *read_line_in_sound_card_proc(void *param)
 
 
         // 混音
-        for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
-            // 转换成浮点数
-            line_out_effects_buf_0[i] = hdmi_in_effects_buf_0[i] * hdmi_in_volume + line_in_effects_buf_0[i] * line_in_volume + usb_in_effects_buf_0[i] * usb_in_volume;
-            line_out_effects_buf_1[i] = hdmi_in_effects_buf_1[i] * hdmi_in_volume + line_in_effects_buf_1[i] * line_in_volume + usb_in_effects_buf_1[i] * usb_in_volume;
+        // 混音前先置零
+        {
+            // hdmi_in
+            for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+                // 转换成浮点数
+                line_out_effects_buf_0[i] = 0.0;
+                line_out_effects_buf_1[i] = 0.0;
+            }
+        }
+        if(hdmi_in_enable != 0)
+        {
+            // hdmi_in
+            for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+                // 转换成浮点数
+                line_out_effects_buf_0[i] += hdmi_in_effects_buf_0[i] * hdmi_in_volume;
+                line_out_effects_buf_1[i] += hdmi_in_effects_buf_1[i] * hdmi_in_volume;
+            }
+        }
+        if(line_in_enable != 0)
+        {
+            // line_in
+            for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+                // 转换成浮点数
+                line_out_effects_buf_0[i] += line_in_effects_buf_0[i] * line_in_volume ;
+                line_out_effects_buf_1[i] += line_in_effects_buf_1[i] * line_in_volume ;
+            }
+        }
+        if(mp4_in_enable != 0)
+        {
+            // mp4_in
+            for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+                // 转换成浮点数
+                // line_out_effects_buf_0[i] = hdmi_in_effects_buf_0[i] * hdmi_in_volume ;
+                // line_out_effects_buf_1[i] = hdmi_in_effects_buf_1[i] * hdmi_in_volume ;
+            }
+        }
+        if(usb_in_enable != 0)
+        {
+            // hdmi_in
+            for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+                // 转换成浮点数
+                line_out_effects_buf_0[i] +=  usb_in_effects_buf_0[i] * usb_in_volume;
+                line_out_effects_buf_1[i] +=  usb_in_effects_buf_1[i] * usb_in_volume;
+            }
         }
 
+        // 计算音频表
         cacl_vu_pk(line_out_effects_buf_0, line_out_effects_buf_1,
                    line_out_peak_l, line_out_vu_l,
                    line_out_peak_r, line_out_vu_r);
-        // 混音后 还原
-        for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
-            // 将数据转换pcm
-            to_out[2 * i + 0] = FLOAT_TO_PCM(line_out_effects_buf_0[i] * line_out_volume);
-            to_out[2 * i + 1] = FLOAT_TO_PCM(line_out_effects_buf_1[i] * line_out_volume);
+
+        if(line_out_enable != 0)
+        {
+            // 混音后 还原
+            for (int i = 0; i < AUDIO_FRAME_SIZE; i++) {
+                // 将数据转换pcm
+                to_out[2 * i + 0] = FLOAT_TO_PCM(line_out_effects_buf_0[i] * line_out_volume);
+                to_out[2 * i + 1] = FLOAT_TO_PCM(line_out_effects_buf_1[i] * line_out_volume);
+            }
+        }
+        else {
+            for (int i = 0; i < AUDIO_FRAME_SIZE; i++) {
+                // 将数据转换pcm
+                to_out[2 * i + 0] = 0.0;
+                to_out[2 * i + 1] = 0.0;
+            }
         }
 
 

@@ -18,4 +18,10 @@ void new_set_line_in_volume(float value);
 void new_set_usb_in_volume(float value);
 void new_set_mp4_in_volume(float value);
 void new_set_line_out_volume(float value);
+
+void new_set_hdmi_in_enable(int value);
+void new_set_line_in_enable(int value);
+void new_set_usb_in_enable(int value);
+void new_set_mp4_in_enable(int value);
+void new_set_line_out_enable(int value);
 #endif //RK_TEST_ALSA_H
