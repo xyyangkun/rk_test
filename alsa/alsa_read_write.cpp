@@ -21,13 +21,22 @@ void *proc_get_vu_pk(void *parm)
     while(!proc_get_vu_pk_quit)
     {
         new_get_meter((void*)&_meter);
-        t_meter_one *one = &_meter.usb_in;
-        printf("vu_l:%d vu_r:%d pk_l:%d pk_r:%d\n", one->vu_left, one->vu_right, one->pk_left, one->pk_right);
+        t_meter_one *one = &_meter.hdmi_in;
+        // printf("vu_l:%d vu_r:%d pk_l:%d pk_r:%d\n", one->vu_left, one->vu_right, one->pk_left, one->pk_right);
         usleep(67*1000);
     }
     return NULL;
 }
 
+int uac_write(void *buf, unsigned int size) {
+    // printf("uac write size:%d\n", size);
+    return 0;
+}
+
+int aac_encode_write(void* buf, unsigned int size) {
+    // printf("aac write size:%d\n", size);
+    return 0;
+}
 int main(int argc, char *argv[])
 {
     signal(SIGINT, sigterm_handler);

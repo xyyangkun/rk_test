@@ -70,7 +70,6 @@ static void _dbg_init(void)
 
 #if SET_THREAD_PRIORITY == 1
 static pthread_attr_t attr_read_line_in_thread;
-static pthread_attr_t attr_read_hdmi_in_thread;
 #endif
 
 // line_in -> line_out 20
@@ -108,6 +107,8 @@ static pthread_attr_t attr_read_hdmi_in_thread;
         sox_macro_temp_double + 0.5                             \
   )
 
+static void *write_aac_sound_proc(void *param);
+static void *write_uac_sound_proc(void *param);
 
 typedef struct alsa_conf
 {
@@ -140,7 +141,6 @@ typedef struct alsa_conf
     // 读声卡线程
     pthread_t read_sound_card_th;
     bool read_sound_card_quit;
-    pthread_t read_hdmi_in_th;
 
     // 读line_in声卡
     int line_in_read_size;
@@ -157,16 +157,23 @@ typedef struct alsa_conf
     int line_out_write_size;
     char *line_out_write_buf;
 
-    // 写声卡线程
-    std::thread write_sound_card_th;
-    bool write_sound_card_quit;
-
     // 读取声卡的数据放到队列中
     UnlockQueue *line_in_read_queue;
-    UnlockQueue *hdmi_in_read_queue;
 
     UnlockQueue *hdmi_in_cache_queue; // hdmi in缓存队列
     UnlockQueue *usb_in_queue;  // usb in缓存队列
+
+    // 写声音线程，将声音写入aac编码器
+    pthread_t write_aac_sound_th;
+    bool write_aac_sound_quit;
+    UnlockQueue *aac_sound_queue;
+    int write_aac_queue_size = 40; // 包数，不是长度
+
+    // 将声音写入uvc_out
+    pthread_t write_uac_sound_th;
+    bool write_uac_sound_quit;
+    UnlockQueue *uac_sound_queue;
+    int write_uac_queue_size = 40; // 包数，不是长度
 }t_alsa_conf;
 
 typedef struct s_audio_buffer
@@ -276,90 +283,6 @@ int close_sound_card(snd_pcm_t **handle)
     }
     snd_pcm_close (*handle);
     return 0;
-}
-
-
-
-// 读取声卡线程
-void *read_hdmi_in_sound_card_proc(void *param)
-{
-    t_alsa_conf *conf = (t_alsa_conf *)param;
-    int err = 0;
-    int hdmi_in_buf_size = 2*alsa_conf.read_channels*alsa_conf.buffer_frames;
-
-    char *hdmi_in_buf = (char *)malloc(hdmi_in_buf_size);
-
-#if TEST_TIME==1
-    const char *hdmi_in_diff = "/tmp/hdmi_in_time_diff";
-    void *hd = time_diff_create(hdmi_in_diff);
-#endif
-
-    while(!conf->read_sound_card_quit) {
-        // 从队列中获取buffer值
-        t_audio_buffer *p_audio_buffer;
-        int16_t *p = nullptr;
-
-        bool queue_empty = false;
-        if(alsa_conf.hdmi_in_cache_queue->GetDataLen() > 0)
-        {
-            queue_empty = false;
-            alsa_conf.hdmi_in_cache_queue->Get(&p_audio_buffer, sizeof(void*));
-            p = (int16_t *)p_audio_buffer->buf;
-            p_audio_buffer->buf_size = conf->buffer_frames;
-        }
-        else
-        {
-            queue_empty = true;
-            error("error in hdmi in read queue size:%d %d\n", alsa_conf.hdmi_in_read_queue->GetDataLen(), alsa_conf.hdmi_in_cache_queue->GetDataLen());
-            p = (int16_t *)hdmi_in_buf;
-        }
-
-
-        // 读声卡
-        if ((err = snd_pcm_readi(conf->hdmi_in_handle, p, conf->buffer_frames)) != conf->buffer_frames) {
-            dbg("%d read from audio interface failed (%s)", err, snd_strerror (err));
-            if (err == -EPIPE) {
-                // 没有及时取走数据
-                /* EPIPE means overrun */
-                dbg("underrun overrun\n");
-                snd_pcm_prepare(conf->hdmi_in_handle);
-            } else if (err < 0) {
-                error("error from writei: %s\n", snd_strerror(err));
-            }
-            // 不进行退出处理
-            // exit (1);
-        }
-
-#if TEST_TIME==1
-        time_diff_start(hd);
-#endif
-
-
-        // 把数据放到队列中
-        if(queue_empty == false){
-            struct timespec crt_tm = {0, 0};
-            clock_gettime(CLOCK_MONOTONIC, &crt_tm);
-            uint64_t t= crt_tm.tv_sec * 1000000LL + crt_tm.tv_nsec / 1000;
-            // 将采集时间放入buffer中
-            p_audio_buffer->ts = t;
-            // 队列不为空时，才需要写入
-            alsa_conf.hdmi_in_read_queue->Put(&p_audio_buffer, sizeof(void*));
-        }
-
-
-
-
-#if TEST_TIME==1
-        time_diff_end(hd);
-#endif
-    }
-
-#if TEST_TIME==1
-    time_diff_delete(&hd);
-#endif
-
-    free(hdmi_in_buf);
-    return nullptr;
 }
 
 // volume_value = pow(10, db/20)
@@ -1042,6 +965,24 @@ void *read_line_in_sound_card_proc(void *param)
 
 #endif
 
+        // 写aac队列数据
+        int aac_queue_size = conf->aac_sound_queue->GetDataLen();
+        if(aac_queue_size <= (conf->write_aac_queue_size - 4) * 2 * 2 * AUDIO_FRAME_SIZE)
+        {
+            conf->aac_sound_queue->Put(conf->line_out_write_buf, conf->buffer_frames * 2 * 2);
+        } else {
+            error("ERROR! aac_queue_size is full!!! aac_queue_size=%d\n", aac_queue_size);
+        }
+        // 写uac队列数据
+        int uac_queue_size = conf->uac_sound_queue->GetDataLen();
+        if(uac_queue_size <= (conf->write_uac_queue_size - 4) * 2 * 2 * AUDIO_FRAME_SIZE)
+        {
+            conf->uac_sound_queue->Put(conf->line_out_write_buf, conf->buffer_frames * 2 * 2);
+        } else {
+            error("ERROR! uac_queue_size is full!!! uac_queue_size=%d\n", uac_queue_size);
+        }
+
+
 
 #if TEST_TIME==1
         time_diff_end(hd);
@@ -1098,16 +1039,22 @@ int init_alsa()
 
     alsa_conf.line_out_handle = nullptr;
     alsa_conf.line_in_read_queue = nullptr;
-    alsa_conf.hdmi_in_read_queue = nullptr;
     alsa_conf.hdmi_in_cache_queue = nullptr;
     alsa_conf.usb_in_queue  = nullptr;
+    alsa_conf.aac_sound_queue  = nullptr;
+    alsa_conf.uac_sound_queue  = nullptr;
 
     // 创建队列缓冲区
     alsa_conf.line_in_read_queue = new UnlockQueue(1024 * alsa_conf.read_channels * 2 * 16);
     alsa_conf.line_in_read_queue->Initialize();
 
-    alsa_conf.hdmi_in_read_queue = new UnlockQueue(/*QUEUE_SIZE*/8 * sizeof(void*));
-    alsa_conf.hdmi_in_read_queue->Initialize();
+    // 分配aac音频队列
+    alsa_conf.aac_sound_queue = new UnlockQueue(AUDIO_FRAME_SIZE * alsa_conf.read_channels * 2 * alsa_conf.write_aac_queue_size);
+    alsa_conf.aac_sound_queue->Initialize();
+
+    // 分配uac音频队列
+    alsa_conf.uac_sound_queue = new UnlockQueue(AUDIO_FRAME_SIZE * alsa_conf.read_channels * 2 * alsa_conf.write_uac_queue_size);
+    alsa_conf.uac_sound_queue->Initialize();
 
     // 分配内存
     {
@@ -1216,56 +1163,31 @@ int init_alsa()
             return -1;
         }
     }
-    {
-        pthread_attr_init(&attr_read_hdmi_in_thread);
-        errno = pthread_attr_setinheritsched(&attr_read_hdmi_in_thread, PTHREAD_EXPLICIT_SCHED);
-        if(errno != 0)
-        {
-            perror("setinherit failed\n");
-            return -1;
-        }
-
-        /* 设置线程的调度策略：SCHED_FIFO：抢占性调度; SCHED_RR：轮寻式调度；SCHED_OTHER：非实时线程调度策略*/
-        ret = pthread_attr_setschedpolicy(&attr_read_hdmi_in_thread, SCHED_RR);
-        if(ret != 0)
-        {
-            perror("setpolicy failed\n");
-            return -1;
-        }
-        //设置优先级的级别
-        param_read_thread.sched_priority = 1;
-
-        //查看抢占性调度策略的最小跟最大静态优先级的值是多少
-        printf("min=%d, max=%d\n", sched_get_priority_min(SCHED_FIFO), sched_get_priority_max(SCHED_FIFO));
-
-        /* 设置线程静态优先级 */
-        ret = pthread_attr_setschedparam(&attr_read_hdmi_in_thread, &param_read_thread);
-        if(ret != 0)
-        {
-            perror("setparam failed\n");
-            return -1;
-        }
-    }
-
     ret = pthread_create(&alsa_conf.read_sound_card_th, &attr_read_line_in_thread, read_line_in_sound_card_proc, &alsa_conf);
     if (ret != 0) {
         error("error to create th:%s", strerror(errno));
         exit(1);
     }
 
+#else
+    pthread_create(&alsa_conf.read_sound_card_th, nullptr, read_sound_card_proc, &alsa_conf);
+#endif
 
-#if 0
-    ret = pthread_create(&alsa_conf.read_hdmi_in_th, &attr_read_hdmi_in_thread, read_hdmi_in_sound_card_proc, &alsa_conf);
+    alsa_conf.write_aac_sound_quit = false;
+    // 创建aac声音编码线程
+    ret = pthread_create(&alsa_conf.write_aac_sound_th, NULL, write_aac_sound_proc, &alsa_conf);
     if (ret != 0) {
         error("error to create th:%s", strerror(errno));
         exit(1);
     }
-#endif
 
-#else
-        pthread_create(&alsa_conf.read_sound_card_th, nullptr, read_sound_card_proc, &alsa_conf);
-#endif
-
+    alsa_conf.write_uac_sound_quit = false;
+    // 创建uac声音编码线程
+    ret = pthread_create(&alsa_conf.write_uac_sound_th, NULL, write_uac_sound_proc, &alsa_conf);
+    if (ret != 0) {
+        error("error to create th:%s", strerror(errno));
+        exit(1);
+    }
 
     dbg("yk debug ");
     return 0;
@@ -1274,18 +1196,20 @@ int deinit_alsa()
 {
     info("debug quit");
 
-    alsa_conf.write_sound_card_quit = true;
+    alsa_conf.write_aac_sound_quit = true;
+    alsa_conf.write_uac_sound_quit = true;
     alsa_conf.read_sound_card_quit = true;
 
-    if(alsa_conf.read_sound_card_th){
+    if(alsa_conf.read_sound_card_th) {
         pthread_join(alsa_conf.read_sound_card_th, nullptr);
     }
-    if(alsa_conf.read_hdmi_in_th){
-        pthread_join(alsa_conf.read_hdmi_in_th, nullptr);
+
+    if(alsa_conf.write_aac_sound_th) {
+        pthread_join(alsa_conf.write_aac_sound_th, nullptr);
     }
 
-    if(alsa_conf.write_sound_card_th.get_id() != std::thread::id()) {
-        alsa_conf.write_sound_card_th.join();
+    if(alsa_conf.write_uac_sound_th) {
+        pthread_join(alsa_conf.write_uac_sound_th, nullptr);
     }
 
     if(alsa_conf.line_in_handle) {
@@ -1342,27 +1266,81 @@ int deinit_alsa()
         delete(alsa_conf.hdmi_in_cache_queue);
         alsa_conf.hdmi_in_cache_queue = nullptr;
     }
-    if(alsa_conf.hdmi_in_read_queue) {
-        while(alsa_conf.hdmi_in_read_queue->GetDataLen() > 0)
-        {
-            t_audio_buffer *p = nullptr;
-            int size = sizeof(sizeof(void*));
-            alsa_conf.hdmi_in_read_queue->Get((unsigned char *)&p, size);
-            free(p);
-        }
-        delete(alsa_conf.hdmi_in_read_queue);
-        alsa_conf.hdmi_in_read_queue = nullptr;
-    }
+
     if(alsa_conf.usb_in_queue) {
         delete(alsa_conf.usb_in_queue);
         alsa_conf.usb_in_queue = nullptr;
     }
 
+    if(alsa_conf.aac_sound_queue) {
+        delete(alsa_conf.aac_sound_queue);
+        alsa_conf.aac_sound_queue = nullptr;
+    }
+
+    if(alsa_conf.uac_sound_queue) {
+        delete(alsa_conf.uac_sound_queue);
+        alsa_conf.uac_sound_queue = nullptr;
+    }
+
 #if SET_THREAD_PRIORITY == 1
     pthread_attr_destroy(&attr_read_line_in_thread);
-    pthread_attr_destroy(&attr_read_hdmi_in_thread);
 #endif
 
     info("debug quit");
+    return 0;
+}
+
+int uac_write(void *buf, unsigned int size);
+int aac_encode_write(void *buf, unsigned int size);
+
+static void *write_aac_sound_proc(void *param)
+{
+    t_alsa_conf *conf = (t_alsa_conf *)param;
+    UnlockQueue *aac_sound_queue = conf->aac_sound_queue;
+    const int aac_block_size= 1024;
+    char aac_buf[aac_block_size*2*2];
+    while(!conf->write_aac_sound_quit)
+    {
+        int aac_queue_size = aac_sound_queue->GetDataLen();
+        // 有足够的数据，就取出数据
+        if(aac_queue_size >= aac_block_size*2*2)
+        {
+            aac_sound_queue->Get(aac_buf, aac_block_size*2*2);
+            aac_encode_write(aac_buf, aac_block_size*2*2);
+        } else {
+            // 没有足够的数据就sleep
+            usleep(10*1000);
+        }
+
+    }
+    return NULL;
+}
+
+static void *write_uac_sound_proc(void *param)
+{
+    t_alsa_conf *conf = (t_alsa_conf *)param;
+    UnlockQueue *uac_sound_queue = conf->uac_sound_queue;
+    const int uac_block_size= 1024;
+    char uac_buf[uac_block_size*2*2];
+    while(!conf->write_uac_sound_quit)
+    {
+        int uac_queue_size = uac_sound_queue->GetDataLen();
+        // 有足够的数据，就取出数据
+        if(uac_queue_size >= uac_block_size*2*2)
+        {
+            uac_sound_queue->Get(uac_buf, uac_block_size*2*2);
+            uac_write(uac_buf, uac_block_size*2*2);
+        } else {
+            // 没有足够的数据就sleep
+            usleep(10*1000);
+        }
+    }
+    return NULL;
+}
+
+// mp4播放后，通过函数将48k音频数据传入
+int new_mp4_audio_write(void *data, int size)
+{
+
     return 0;
 }
