@@ -20,6 +20,7 @@
 #include "alsa.h"
 #include "time_utils.h"
 #include "rkav_interface.h"
+#include "osee_effects.h"
 
 
 #define VERSION "0.2"
@@ -645,6 +646,11 @@ void *read_line_in_sound_card_proc(void *param)
     float *line_in_effects_buf_0 = line_in_effects_buf;
     float *line_in_effects_buf_1 = line_in_effects_buf + AUDIO_FRAME_SIZE;
 
+    // 分配 line_in 通道数据
+    float *line_in_ns_effects_buf = (float *)malloc(AUDIO_FRAME_SIZE * 2 * sizeof(float ));
+    float *line_in_ns_effects_buf_0 = line_in_ns_effects_buf;
+    float *line_in_ns_effects_buf_1 = line_in_ns_effects_buf + AUDIO_FRAME_SIZE;
+
     // 分配 line_out 通道数据
     float *line_out_effects_buf = (float *)malloc(AUDIO_FRAME_SIZE * 2 * sizeof(float ));
     float *line_out_effects_buf_0 = line_out_effects_buf;
@@ -890,7 +896,11 @@ void *read_line_in_sound_card_proc(void *param)
             line_in_effects_buf_0[i] = INT16_TO_FLOAT(from_line_in[2 * i + 0]);
             line_in_effects_buf_1[i] = INT16_TO_FLOAT(from_line_in[2 * i + 1]);
         }
-        cacl_vu_pk(line_in_effects_buf_0, line_in_effects_buf_1,
+        // 调用降噪算法
+        osee_ns_flow0(line_in_effects_buf_0, line_in_ns_effects_buf_0, 2);
+        osee_ns_flow1(line_in_effects_buf_1, line_in_ns_effects_buf_1, 2);
+
+        cacl_vu_pk(line_in_ns_effects_buf_0, line_in_ns_effects_buf_1,
                    line_in_peak_l, line_in_vu_l,
                    line_in_peak_r, line_in_vu_r);
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
@@ -927,8 +937,8 @@ void *read_line_in_sound_card_proc(void *param)
             // line_in
             for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
                 // 转换成浮点数
-                line_out_effects_buf_0[i] += line_in_effects_buf_0[i] * line_in_volume ;
-                line_out_effects_buf_1[i] += line_in_effects_buf_1[i] * line_in_volume ;
+                line_out_effects_buf_0[i] += line_in_ns_effects_buf_0[i] * line_in_volume ;
+                line_out_effects_buf_1[i] += line_in_ns_effects_buf_1[i] * line_in_volume ;
             }
         }
         if(mp4_in_enable != 0)
@@ -1033,6 +1043,7 @@ void *read_line_in_sound_card_proc(void *param)
     free(usb_in_effects_buf);
     free(mp4_in_effects_buf);
     free(line_in_effects_buf);
+    free(line_in_ns_effects_buf);
     free(line_out_effects_buf);
 
     free(buf);

@@ -4,7 +4,7 @@
 # rv1126 sample code
 set(target "alsa_read_write")
 add_executable(${target} ${target}.cpp alsa_log.c UnlockQueue.cpp time_utils.c alsa.cpp sound_card_get.c usb_camera_notify.c usb_camera_get.c usb_camer_audio.cpp)
-target_link_libraries(${target} asound soxr)
+target_link_libraries(${target} asound soxr rveffects_static)
 #target_include_directories(${target} PRIVATE ${SYSROOT_PATH}/usr/include)
 target_include_directories(${target} PRIVATE  /works/rk3568/rk3568_v1_2_4/buildroot/output/rockchip_rk3568/host/aarch64-buildroot-linux-gnu/sysroot/usr/include )
 #编译目标设置-DTEST宏

@@ -71,7 +71,8 @@ elseif (CMAKE_SYSTEM_NAME MATCHES "Darwin")
 endif ()
 
 LINK_DIRECTORIES(${LIBRARY_OUTPUT_PATH})
-
+link_directories(lib)
+include_directories(include)
 
 add_executable(hello hello.c)
 target_link_libraries(hello rga drm drm pthread z v4l2 v4l2rds  rockchip_mpp m)
