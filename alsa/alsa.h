@@ -13,4 +13,9 @@ int init_alsa();
 int deinit_alsa();
 
 void new_get_meter(void *_meter);
+void new_set_hdmi_in_volume(float value);
+void new_set_line_in_volume(float value);
+void new_set_usb_in_volume(float value);
+void new_set_mp4_in_volume(float value);
+void new_set_line_out_volume(float value);
 #endif //RK_TEST_ALSA_H

@@ -361,6 +361,17 @@ void *read_hdmi_in_sound_card_proc(void *param)
     return nullptr;
 }
 
+// volume_value = pow(10, db/20)
+static float hdmi_in_volume = 1.0;
+static float line_in_volume = 1.0;
+static float usb_in_volume = 1.0;
+static float mp4_in_volume = 1.0;
+static float line_out_volume = 1.0;
+void new_set_hdmi_in_volume(float value) {hdmi_in_volume = value;}
+void new_set_line_in_volume(float value) {line_in_volume = value;}
+void new_set_usb_in_volume(float value)  {usb_in_volume = value;}
+void new_set_mp4_in_volume(float value)  {mp4_in_volume = value;}
+void new_set_line_out_volume(float value){line_out_volume = value;}
 static float rms_factor_peak =  1.0/131072.0;
 static float rms_factor_rms =  32.0/131072.0;
 static t_meter audio_meter;
@@ -848,8 +859,8 @@ void *read_line_in_sound_card_proc(void *param)
         // 混音
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
             // 转换成浮点数
-            line_out_effects_buf_0[i] = hdmi_in_effects_buf_0[i] + line_in_effects_buf_0[i] + usb_in_effects_buf_0[i];
-            line_out_effects_buf_1[i] = hdmi_in_effects_buf_1[i] + line_in_effects_buf_1[i] + usb_in_effects_buf_1[i];
+            line_out_effects_buf_0[i] = hdmi_in_effects_buf_0[i] * hdmi_in_volume + line_in_effects_buf_0[i] * line_in_volume + usb_in_effects_buf_0[i] * usb_in_volume;
+            line_out_effects_buf_1[i] = hdmi_in_effects_buf_1[i] * hdmi_in_volume + line_in_effects_buf_1[i] * line_in_volume + usb_in_effects_buf_1[i] * usb_in_volume;
         }
 
         cacl_vu_pk(line_out_effects_buf_0, line_out_effects_buf_1,
@@ -858,8 +869,8 @@ void *read_line_in_sound_card_proc(void *param)
         // 混音后 还原
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
             // 将数据转换pcm
-            to_out[2 * i + 0] = FLOAT_TO_PCM(line_out_effects_buf_0[i]);
-            to_out[2 * i + 1] = FLOAT_TO_PCM(line_out_effects_buf_1[i]);
+            to_out[2 * i + 0] = FLOAT_TO_PCM(line_out_effects_buf_0[i] * line_out_volume);
+            to_out[2 * i + 1] = FLOAT_TO_PCM(line_out_effects_buf_1[i] * line_out_volume);
         }
 
 
