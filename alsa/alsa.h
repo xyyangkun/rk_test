@@ -11,4 +11,6 @@
 
 int init_alsa();
 int deinit_alsa();
+
+void new_get_meter(void *_meter);
 #endif //RK_TEST_ALSA_H

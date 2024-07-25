@@ -19,6 +19,7 @@
 #include "alsa_log.h"
 #include "alsa.h"
 #include "time_utils.h"
+#include "rkav_interface.h"
 
 
 #define VERSION "0.2"
@@ -360,6 +361,184 @@ void *read_hdmi_in_sound_card_proc(void *param)
     return nullptr;
 }
 
+static float rms_factor_peak =  1.0/131072.0;
+static float rms_factor_rms =  32.0/131072.0;
+static t_meter audio_meter;
+static float hdmi_in_peak_l = 0;
+static float hdmi_in_vu_l =  0;  // rms
+static float hdmi_in_peak_r = 0;
+static float hdmi_in_vu_r =  0;   // rms
+
+static float usb_in_peak_l = 0;
+static float usb_in_vu_l =  0;  // rms
+static float usb_in_peak_r = 0;
+static float usb_in_vu_r =  0;   // rms
+
+static float line_in_peak_l = 0;
+static float line_in_vu_l =  0;  // rms
+static float line_in_peak_r = 0;
+static float line_in_vu_r =  0;   // rms
+
+static float line_out_peak_l = 0;
+static float line_out_vu_l =  0;  // rms
+static float line_out_peak_r = 0;
+static float line_out_vu_r =  0;   // rms
+
+inline void cacl_vu_pk(float *effects_buf_0, float *effects_buf_1, float& peak_l, float& vu_l, float& peak_r, float& vu_r )
+{
+    float tmp, x;
+
+    // 计算vu pk
+    for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+        // 左声道 peak
+        x = fabs(effects_buf_0[i]);
+        tmp = peak_l + (x - peak_l)* rms_factor_peak;
+        peak_l = tmp > x ? tmp:x;
+        // 左声道 vu
+        vu_l = vu_l + (x - vu_l) * rms_factor_rms;
+    }
+    for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+        // 右声道 peak
+        x = fabs(effects_buf_1[i]);
+        tmp = peak_r + (x - peak_r)* rms_factor_peak;
+        peak_r = tmp > x ? tmp:x;
+        // 右声道 vu
+        vu_r = vu_r + (x - vu_r) * rms_factor_rms;
+    }
+}
+
+// 写声卡线程
+void new_get_meter(void *_meter)
+{
+
+    int32_t i_peak_l = 0;
+    int32_t i_vu_l =  0;
+    int32_t i_peak_r = 0;
+    int32_t i_vu_r =  0;
+
+    // hdmi_in
+    {
+        i_peak_l = (int32_t)(20.0*log10(  hdmi_in_peak_l));
+        i_vu_l   = (int32_t)(20.0 * log10(hdmi_in_vu_l));
+        i_peak_r = (int32_t)(20.0*log10(  hdmi_in_peak_r));
+        i_vu_r   = (int32_t)(20.0 * log10(hdmi_in_vu_r));
+        //i_peak_l += 6;
+        i_vu_l   += 6;
+        //i_peak_r += 6;
+        i_vu_r   += 6;
+        // 检测vu pk值过大，并输出
+        /*
+        if(i_peak_l > 0 || i_vu_l > 0|| i_peak_r > 0|| i_vu_r > 0){
+            osee_error("error in vu_pk peak_l=%d peak_r = %d rms_l=%d rms_r=%d",
+                       i_peak_l, i_peak_r, i_vu_l, i_vu_r );
+        }
+         //*/
+        //osee_print("in vu_pk peak_l=%f==%d peak_r = %f==%d rms_l=%f==%d rms_r=%f==%d",
+        //           peak_l, i_peak_l, peak_r, i_peak_r, vu_l, i_vu_l, vu_r, i_vu_r );
+        i_peak_l= i_peak_l < -40 ? -40 : i_peak_l > 0 ? 0 : i_peak_l;
+        i_vu_l  = i_vu_l   < -40 ? -40 : i_vu_l   > 0 ? 0 : i_vu_l  ;
+        i_peak_r= i_peak_r < -40 ? -40 : i_peak_r > 0 ? 0 : i_peak_r;
+        i_vu_r  = i_vu_r   < -40 ? -40 : i_vu_r   > 0 ? 0 : i_vu_r  ;
+
+        audio_meter.hdmi_in.pk_left  = i_peak_l;
+        audio_meter.hdmi_in.vu_left  = i_vu_l  ;
+        audio_meter.hdmi_in.pk_right = i_peak_r;
+        audio_meter.hdmi_in.vu_right = i_vu_r  ;
+    }
+
+    // line_in
+    {
+        i_peak_l = (int32_t)(20.0*log10(  line_in_peak_l));
+        i_vu_l   = (int32_t)(20.0 * log10(line_in_vu_l));
+        i_peak_r = (int32_t)(20.0*log10(  line_in_peak_r));
+        i_vu_r   = (int32_t)(20.0 * log10(line_in_vu_r));
+        //i_peak_l += 6;
+        i_vu_l   += 6;
+        //i_peak_r += 6;
+        i_vu_r   += 6;
+        // 检测vu pk值过大，并输出
+        /*
+        if(i_peak_l > 0 || i_vu_l > 0|| i_peak_r > 0|| i_vu_r > 0){
+            osee_error("error in vu_pk peak_l=%d peak_r = %d rms_l=%d rms_r=%d",
+                       i_peak_l, i_peak_r, i_vu_l, i_vu_r );
+        }
+         //*/
+        //osee_print("in vu_pk peak_l=%f==%d peak_r = %f==%d rms_l=%f==%d rms_r=%f==%d",
+        //           peak_l, i_peak_l, peak_r, i_peak_r, vu_l, i_vu_l, vu_r, i_vu_r );
+        i_peak_l= i_peak_l < -40 ? -40 : i_peak_l > 0 ? 0 : i_peak_l;
+        i_vu_l  = i_vu_l   < -40 ? -40 : i_vu_l   > 0 ? 0 : i_vu_l  ;
+        i_peak_r= i_peak_r < -40 ? -40 : i_peak_r > 0 ? 0 : i_peak_r;
+        i_vu_r  = i_vu_r   < -40 ? -40 : i_vu_r   > 0 ? 0 : i_vu_r  ;
+
+        audio_meter.line_mic.pk_left  = i_peak_l;
+        audio_meter.line_mic.vu_left  = i_vu_l  ;
+        audio_meter.line_mic.pk_right = i_peak_r;
+        audio_meter.line_mic.vu_right = i_vu_r  ;
+    }
+
+    // usb_in
+    {
+        i_peak_l = (int32_t)(20.0*log10(  usb_in_peak_l));
+        i_vu_l   = (int32_t)(20.0 * log10(usb_in_vu_l));
+        i_peak_r = (int32_t)(20.0*log10(  usb_in_peak_r));
+        i_vu_r   = (int32_t)(20.0 * log10(usb_in_vu_r));
+        //i_peak_l += 6;
+        i_vu_l   += 6;
+        //i_peak_r += 6;
+        i_vu_r   += 6;
+        // 检测vu pk值过大，并输出
+        /*
+        if(i_peak_l > 0 || i_vu_l > 0|| i_peak_r > 0|| i_vu_r > 0){
+            osee_error("error in vu_pk peak_l=%d peak_r = %d rms_l=%d rms_r=%d",
+                       i_peak_l, i_peak_r, i_vu_l, i_vu_r );
+        }
+         //*/
+        //osee_print("in vu_pk peak_l=%f==%d peak_r = %f==%d rms_l=%f==%d rms_r=%f==%d",
+        //           peak_l, i_peak_l, peak_r, i_peak_r, vu_l, i_vu_l, vu_r, i_vu_r );
+        i_peak_l= i_peak_l < -40 ? -40 : i_peak_l > 0 ? 0 : i_peak_l;
+        i_vu_l  = i_vu_l   < -40 ? -40 : i_vu_l   > 0 ? 0 : i_vu_l  ;
+        i_peak_r= i_peak_r < -40 ? -40 : i_peak_r > 0 ? 0 : i_peak_r;
+        i_vu_r  = i_vu_r   < -40 ? -40 : i_vu_r   > 0 ? 0 : i_vu_r  ;
+
+        audio_meter.usb_in.pk_left  = i_peak_l;
+        audio_meter.usb_in.vu_left  = i_vu_l  ;
+        audio_meter.usb_in.pk_right = i_peak_r;
+        audio_meter.usb_in.vu_right = i_vu_r  ;
+    }
+
+
+    // line_out
+    {
+        i_peak_l = (int32_t)(20.0*log10(  line_out_peak_l));
+        i_vu_l   = (int32_t)(20.0 * log10(line_out_vu_l));
+        i_peak_r = (int32_t)(20.0*log10(  line_out_peak_r));
+        i_vu_r   = (int32_t)(20.0 * log10(line_out_vu_r));
+        //i_peak_l += 6;
+        i_vu_l   += 6;
+        //i_peak_r += 6;
+        i_vu_r   += 6;
+        // 检测vu pk值过大，并输出
+        /*
+        if(i_peak_l > 0 || i_vu_l > 0|| i_peak_r > 0|| i_vu_r > 0){
+            osee_error("error in vu_pk peak_l=%d peak_r = %d rms_l=%d rms_r=%d",
+                       i_peak_l, i_peak_r, i_vu_l, i_vu_r );
+        }
+         //*/
+        //osee_print("in vu_pk peak_l=%f==%d peak_r = %f==%d rms_l=%f==%d rms_r=%f==%d",
+        //           peak_l, i_peak_l, peak_r, i_peak_r, vu_l, i_vu_l, vu_r, i_vu_r );
+        i_peak_l= i_peak_l < -40 ? -40 : i_peak_l > 0 ? 0 : i_peak_l;
+        i_vu_l  = i_vu_l   < -40 ? -40 : i_vu_l   > 0 ? 0 : i_vu_l  ;
+        i_peak_r= i_peak_r < -40 ? -40 : i_peak_r > 0 ? 0 : i_peak_r;
+        i_vu_r  = i_vu_r   < -40 ? -40 : i_vu_r   > 0 ? 0 : i_vu_r  ;
+
+        audio_meter.out.pk_left  = i_peak_l;
+        audio_meter.out.vu_left  = i_vu_l  ;
+        audio_meter.out.pk_right = i_peak_r;
+        audio_meter.out.vu_right = i_vu_r  ;
+    }
+    memcpy(_meter, &audio_meter, sizeof(audio_meter));
+}
+
 // 读取声卡线程
 void *read_line_in_sound_card_proc(void *param)
 {
@@ -387,11 +566,30 @@ void *read_line_in_sound_card_proc(void *param)
 
 #define POINT_SIZE ( 2 * sizeof(int16_t))
 
-    // 分配两个通道的呢次
-    float *effects_buf = (float *)malloc(AUDIO_FRAME_SIZE * 2 * sizeof(float ));
-    float *effects_buf_0 = effects_buf;
-    float *effects_buf_1 = effects_buf + AUDIO_FRAME_SIZE;
+    // 分配 hdmi_in 通道数据
+    float *hdmi_in_effects_buf = (float *)malloc(AUDIO_FRAME_SIZE * 2 * sizeof(float ));
+    float *hdmi_in_effects_buf_0 = hdmi_in_effects_buf;
+    float *hdmi_in_effects_buf_1 = hdmi_in_effects_buf + AUDIO_FRAME_SIZE;
 
+    // 分配 usb_in 通道数据
+    float *usb_in_effects_buf = (float *)malloc(AUDIO_FRAME_SIZE * 2 * sizeof(float ));
+    float *usb_in_effects_buf_0 = usb_in_effects_buf;
+    float *usb_in_effects_buf_1 = usb_in_effects_buf + AUDIO_FRAME_SIZE;
+
+    // 分配 usb_in 通道数据
+    float *mp4_in_effects_buf = (float *)malloc(AUDIO_FRAME_SIZE * 2 * sizeof(float ));
+    float *mp4_in_effects_buf_0 = mp4_in_effects_buf;
+    float *mp4_in_effects_buf_1 = mp4_in_effects_buf + AUDIO_FRAME_SIZE;
+
+    // 分配 line_in 通道数据
+    float *line_in_effects_buf = (float *)malloc(AUDIO_FRAME_SIZE * 2 * sizeof(float ));
+    float *line_in_effects_buf_0 = line_in_effects_buf;
+    float *line_in_effects_buf_1 = line_in_effects_buf + AUDIO_FRAME_SIZE;
+
+    // 分配 line_out 通道数据
+    float *line_out_effects_buf = (float *)malloc(AUDIO_FRAME_SIZE * 2 * sizeof(float ));
+    float *line_out_effects_buf_0 = line_out_effects_buf;
+    float *line_out_effects_buf_1 = line_out_effects_buf + AUDIO_FRAME_SIZE;
 
 #if TEST_TIME==1
     const char *line_in_out = "/tmp/audio_line_time_diff";
@@ -560,7 +758,7 @@ void *read_line_in_sound_card_proc(void *param)
             hdmi_in_start_read = false;
             memset(hdmi_in_read_buf, 0, conf->buffer_frames*2*2);
         }
-        int16_t *from1 = (int16_t *)hdmi_in_read_buf;
+
 //
 
 
@@ -613,44 +811,57 @@ void *read_line_in_sound_card_proc(void *param)
         }
 
 
-        int16_t *from_usb = (int16_t *)usb_in_read_buf;
+        int16_t *from_hdmi_in = (int16_t *)hdmi_in_read_buf;
+        int16_t *from_usb_in = (int16_t *)usb_in_read_buf;
 
-#if AUDIO_READ_CHN == 2 && AUDIO_WRITE_CHN == 2
         int16_t *from_line_in = (int16_t *)conf->line_in_read_buf;
         int16_t *to_out = (int16_t *)conf->line_out_write_buf;
-        for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
-            to_out[2 * i + 0] = from_line_in[2 * i + 0];
-            to_out[2 * i + 1] = from_line_in[2 * i + 1];
-            //printf("read from %d\n", from0[2*i + 0]);
-        }
-#elif AUDIO_READ_CHN == 2 && AUDIO_WRITE_CHN == 4
-        uint16_t *from0 = (uint16_t *)conf->read_sound_card_buf;
-        uint16_t *from1 = (uint16_t *)read_file_buf;
-        uint16_t *to = (uint16_t *)conf->write_sound_card_buf;
-        for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
-            to[4*i + 0] = from1[2*i + 0];
-            to[4*i + 1] = from1[2*i + 1];
-            to[4*i + 2] = from0[2*i + 0];
-            to[4*i + 3] = from0[2*i + 1];
-        }
-#else
-#error "audio read channel and write channel not def"
-#endif
 
-
-#if 1
+        // 转换 并计算
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
             // 转换成浮点数
-            effects_buf_0[i] = INT16_TO_FLOAT(from_line_in[2 * i + 0] + from1[2 * i + 0] + from_usb[2 * i + 0]);
-            effects_buf_1[i] = INT16_TO_FLOAT(from_line_in[2 * i + 1] + from1[2 * i + 1] + from_usb[2 * i + 1]);
+            hdmi_in_effects_buf_0[i] = INT16_TO_FLOAT(from_hdmi_in[2 * i + 0]);
+            hdmi_in_effects_buf_1[i] = INT16_TO_FLOAT(from_hdmi_in[2 * i + 1]);
         }
+        cacl_vu_pk(hdmi_in_effects_buf_0, hdmi_in_effects_buf_1,
+                   hdmi_in_peak_l, hdmi_in_vu_l,
+                   hdmi_in_peak_r, hdmi_in_vu_r);
 
         for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
-            // 将数据转换pcm
-            to_out[2 * i + 0] = FLOAT_TO_PCM(effects_buf_0[i]);
-            to_out[2 * i + 1] = FLOAT_TO_PCM(effects_buf_1[i]);
+            // 转换成浮点数
+            line_in_effects_buf_0[i] = INT16_TO_FLOAT(from_line_in[2 * i + 0]);
+            line_in_effects_buf_1[i] = INT16_TO_FLOAT(from_line_in[2 * i + 1]);
         }
-#endif
+        cacl_vu_pk(line_in_effects_buf_0, line_in_effects_buf_1,
+                   line_in_peak_l, line_in_vu_l,
+                   line_in_peak_r, line_in_vu_r);
+        for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+            // 转换成浮点数
+            usb_in_effects_buf_0[i] = INT16_TO_FLOAT(from_usb_in[2 * i + 0]);
+            usb_in_effects_buf_1[i] = INT16_TO_FLOAT(from_usb_in[2 * i + 1]);
+        }
+        cacl_vu_pk(usb_in_effects_buf_0, usb_in_effects_buf_1,
+                   usb_in_peak_l, usb_in_vu_l,
+                   usb_in_peak_r, usb_in_vu_r);
+
+
+        // 混音
+        for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+            // 转换成浮点数
+            line_out_effects_buf_0[i] = hdmi_in_effects_buf_0[i] + line_in_effects_buf_0[i] + usb_in_effects_buf_0[i];
+            line_out_effects_buf_1[i] = hdmi_in_effects_buf_1[i] + line_in_effects_buf_1[i] + usb_in_effects_buf_1[i];
+        }
+
+        cacl_vu_pk(line_out_effects_buf_0, line_out_effects_buf_1,
+                   line_out_peak_l, line_out_vu_l,
+                   line_out_peak_r, line_out_vu_r);
+        // 混音后 还原
+        for(int i=0; i < AUDIO_FRAME_SIZE; i++) {
+            // 将数据转换pcm
+            to_out[2 * i + 0] = FLOAT_TO_PCM(line_out_effects_buf_0[i]);
+            to_out[2 * i + 1] = FLOAT_TO_PCM(line_out_effects_buf_1[i]);
+        }
+
 
         if(start == 0) {
             // 先写一部分数据填充，防止声卡没有足够的数据出现问题
@@ -708,7 +919,12 @@ void *read_line_in_sound_card_proc(void *param)
     time_diff_delete(&hd);
 #endif
 
-    free(effects_buf);
+    free(hdmi_in_effects_buf);
+    free(usb_in_effects_buf);
+    free(mp4_in_effects_buf);
+    free(line_in_effects_buf);
+    free(line_out_effects_buf);
+
     free(buf);
     free(hdmi_in_read_buf);
     free(hdmi_in_local_queue_buf);
