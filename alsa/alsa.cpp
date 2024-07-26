@@ -301,10 +301,10 @@ void new_set_usb_in_volume(float value)  {usb_in_volume = value;}
 void new_set_mp4_in_volume(float value)  {mp4_in_volume = value;}
 void new_set_line_out_volume(float value){line_out_volume = value;}
 
-static int hdmi_in_enable  = 1;
-static int line_in_enable  = 1;
-static int usb_in_enable   = 1;
-static int mp4_in_enable   = 1;
+static int hdmi_in_enable  = 0;
+static int line_in_enable  = 0;
+static int usb_in_enable   = 0;
+static int mp4_in_enable   = 0;
 static int line_out_enable = 1;
 
 void new_set_hdmi_in_enable(int value) {hdmi_in_enable = value;}
@@ -312,6 +312,13 @@ void new_set_line_in_enable(int value) {line_in_enable = value;}
 void new_set_usb_in_enable(int value)  {usb_in_enable = value;}
 void new_set_mp4_in_enable(int value)  {mp4_in_enable = value;}
 void new_set_line_out_enable(int value){line_out_enable = value;}
+
+static volatile int mix_hdmi_audio_out_sel = 0; //0  // mix音频 hdmi输出
+static volatile int mix_usb_audio_out_sel = 0;  //1 // mix音频  usb输出
+static volatile int mix_35_audio_out_sel = 0;  //8 //  mix音频3.5输出
+void new_set_hdmi_audio_out_enable(int value) {mix_hdmi_audio_out_sel = value;}
+void new_usb_audio_out_enable(int value)      {mix_usb_audio_out_sel = value;}
+void new_35_audio_out_enable(int value)       {mix_35_audio_out_sel = value;}
 
 static float rms_factor_peak =  1.0/131072.0;
 static float rms_factor_rms =  32.0/131072.0;
@@ -964,20 +971,23 @@ void *read_line_in_sound_card_proc(void *param)
             start = 1;
         }
 
-
-        // 写声卡
-        err = snd_pcm_writei(conf->line_out_handle, conf->line_out_write_buf, conf->buffer_frames);
-        if (err == -EPIPE) {
-            /* EPIPE means underrun */
-            dbg("line out underrun occurred\n");
-            snd_pcm_prepare(conf->line_out_handle);
-            snd_pcm_writei(conf->line_out_handle, buf, AUDIO_FRAME_SIZE);
-        } else if (err < 0) {
-            error( "error from line out writei: %s\n", snd_strerror(err));
-        }  else if (err != (int)conf->buffer_frames) {
-            error("%d write to audio interface failed (%s)\n",
-                  err, snd_strerror (err));
-            //exit (1);
+        // 允许3.5 out输出
+        if(mix_35_audio_out_sel == 1)
+        {
+            // 写声卡
+            err = snd_pcm_writei(conf->line_out_handle, conf->line_out_write_buf, conf->buffer_frames);
+            if (err == -EPIPE) {
+                /* EPIPE means underrun */
+                dbg("line out underrun occurred\n");
+                snd_pcm_prepare(conf->line_out_handle);
+                snd_pcm_writei(conf->line_out_handle, buf, AUDIO_FRAME_SIZE);
+            } else if (err < 0) {
+                error( "error from line out writei: %s\n", snd_strerror(err));
+            }  else if (err != (int)conf->buffer_frames) {
+                error("%d write to audio interface failed (%s)\n",
+                      err, snd_strerror (err));
+                //exit (1);
+            }
         }
 
 #if 1
@@ -987,19 +997,23 @@ void *read_line_in_sound_card_proc(void *param)
             hdmi_start = 1;
         }
 
-        // 写hdmi_out声卡
-        err = snd_pcm_writei(conf->hdmi_out_handle, conf->line_out_write_buf, conf->buffer_frames);
-        if (err == -EPIPE) {
-            /* EPIPE means underrun */
-            dbg("hdmi out underrun occurred\n");
-            snd_pcm_prepare(conf->hdmi_out_handle);
-            snd_pcm_writei(conf->hdmi_out_handle, buf, AUDIO_FRAME_SIZE);
-        } else if (err < 0) {
-            error( "error from hdmi out  writei: %s\n", snd_strerror(err));
-        }  else if (err != (int)conf->buffer_frames) {
-            error("%d write to hdmi out audio interface failed (%s)\n",
-                  err, snd_strerror (err));
-            //exit (1);
+        // 允许hdmi out输出
+        if(mix_hdmi_audio_out_sel  == 1)
+        {
+            // 写hdmi_out声卡
+            err = snd_pcm_writei(conf->hdmi_out_handle, conf->line_out_write_buf, conf->buffer_frames);
+            if (err == -EPIPE) {
+                /* EPIPE means underrun */
+                dbg("hdmi out underrun occurred\n");
+                snd_pcm_prepare(conf->hdmi_out_handle);
+                snd_pcm_writei(conf->hdmi_out_handle, buf, AUDIO_FRAME_SIZE);
+            } else if (err < 0) {
+                error( "error from hdmi out  writei: %s\n", snd_strerror(err));
+            }  else if (err != (int)conf->buffer_frames) {
+                error("%d write to hdmi out audio interface failed (%s)\n",
+                      err, snd_strerror (err));
+                //exit (1);
+            }
         }
 
 #endif
@@ -1012,13 +1026,17 @@ void *read_line_in_sound_card_proc(void *param)
         } else {
             error("ERROR! aac_queue_size is full!!! aac_queue_size=%d\n", aac_queue_size);
         }
-        // 写uac队列数据
-        int uac_queue_size = conf->uac_sound_queue->GetDataLen();
-        if(uac_queue_size <= (conf->write_uac_queue_size - 4) * 2 * 2 * AUDIO_FRAME_SIZE)
+        // 允许usb uac 音频输出
+        if(mix_usb_audio_out_sel == 1)
         {
-            conf->uac_sound_queue->Put(conf->line_out_write_buf, conf->buffer_frames * 2 * 2);
-        } else {
-            error("ERROR! uac_queue_size is full!!! uac_queue_size=%d\n", uac_queue_size);
+            // 写uac队列数据
+            int uac_queue_size = conf->uac_sound_queue->GetDataLen();
+            if(uac_queue_size <= (conf->write_uac_queue_size - 4) * 2 * 2 * AUDIO_FRAME_SIZE)
+            {
+                conf->uac_sound_queue->Put(conf->line_out_write_buf, conf->buffer_frames * 2 * 2);
+            } else {
+                error("ERROR! uac_queue_size is full!!! uac_queue_size=%d\n", uac_queue_size);
+            }
         }
 
 

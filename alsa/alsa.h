@@ -25,5 +25,9 @@ void new_set_usb_in_enable(int value);
 void new_set_mp4_in_enable(int value);
 void new_set_line_out_enable(int value);
 
+void new_set_hdmi_audio_out_enable(int value);
+void new_usb_audio_out_enable(int value);
+void new_35_audio_out_enable(int value);
+
 int new_mp4_audio_write(void *data, int size);
 #endif //RK_TEST_ALSA_H

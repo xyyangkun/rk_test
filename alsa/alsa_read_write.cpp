@@ -37,6 +37,8 @@ int aac_encode_write(void* buf, unsigned int size) {
     // printf("aac write size:%d\n", size);
     return 0;
 }
+
+
 int main(int argc, char *argv[])
 {
     signal(SIGINT, sigterm_handler);
@@ -44,6 +46,17 @@ int main(int argc, char *argv[])
     signal(SIGUSR1, sigterm_handler);
 
     init_alsa();
+
+
+    // 打开所有开关
+    new_set_hdmi_in_enable (1);
+    new_set_line_in_enable (1);
+    new_set_usb_in_enable  (1);
+    new_set_mp4_in_enable  (1);
+    new_set_line_out_enable(1);
+    new_set_hdmi_audio_out_enable(1);
+    new_usb_audio_out_enable     (1);
+    new_35_audio_out_enable      (1);
 
     // 仅仅用于发于usb camera带的声卡
     init_usb_camera();
